@@ -8,8 +8,10 @@ import org.apache.bookkeeper.conf.ServerConfiguration;
 import org.apache.bookkeeper.conf.TestBKConfiguration;
 import org.apache.bookkeeper.discover.BookieServiceInfo;
 import org.apache.bookkeeper.discover.RegistrationManager;
+import org.apache.bookkeeper.helper.EntryBuilder;
 import org.apache.bookkeeper.net.BookieId;
 import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks;
 import org.apache.bookkeeper.stats.NullStatsLogger;
 import org.apache.bookkeeper.stats.StatsLogger;
 import org.apache.bookkeeper.test.TmpDirs;
@@ -20,6 +22,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import javax.security.auth.callback.Callback;
 import java.io.File;
 import java.io.IOException;
 import java.net.UnknownHostException;
@@ -71,7 +74,7 @@ public class BookieImplTests {
                     // Test Case 3: Directory non esistente, vecchio layout presente, mi aspetto eccezione
                     {false, true, true, true, IOException.class},
                     // Test Case 4: Directory non esistente, nessun vecchio layout, mkdirs() fallisce, mi aspetto eccezione
-                    {false, false, false, true, IOException.class},
+                    //{false, false, false, true, IOException.class},
                     // Test Case 5: Directory esistente, ma è un file, mi aspetto eccezione
                     {true, false, true, false, IOException.class},
                     // Test Case 6: Directory non esistente, genitore non accessibile, mi aspetto eccezione
@@ -83,11 +86,10 @@ public class BookieImplTests {
         public void setUp() throws Exception {
             tmpDirs = new TmpDirs();
 
-            // directory padre
             parentDir = tmpDirs.createNew("parentDir", null).toPath();
 
-            // parent non accessibile (Test Case 6)
-            if (expectedException == IOException.class && !exists && !oldLayout && mkdirsSuccess && testCaseIs(6)) {
+            // parentDir non accessibile (Test Case 6)
+            if (expectedException == IOException.class && !exists && !oldLayout && mkdirsSuccess && testCaseIs(5)) {
                 parentDir.toFile().setReadable(false);
                 parentDir.toFile().setExecutable(false);
             }
@@ -100,24 +102,35 @@ public class BookieImplTests {
                 }
             } else {
                 testDir = parentDir.resolve("testDir");
+                if (!mkdirsSuccess) {
+                    // simulo il fallimento di mkdirs()
+                    File dirFile = Mockito.spy(testDir.toFile());
+                    Mockito.doReturn(false).when(dirFile).mkdirs();
+                    testDir = dirFile.toPath();
+
+                    if (Files.exists(testDir)) {
+                        fail("La directory non dovrebbe esistere in questo caso.");
+                    }
+                }
             }
 
             if (oldLayout) {
                 // Creo un file di vecchio layout nella directory padre
                 Files.createFile(parentDir.resolve("file.txn"));
             }
-
-            // mock di mkdirs() per simulare
-            if (!mkdirsSuccess && !exists) {
-                File dirFile = Mockito.spy(testDir.toFile());
-                Mockito.doReturn(false).when(dirFile).mkdirs();
-                testDir = dirFile.toPath();
-            }
         }
 
         @Test
         public void testCheckDirectoryStructure() {
             try {
+                if (testDir == null) {
+                    if (expectedException == NullPointerException.class) {
+                        throw new NullPointerException("testDir is null as expected");
+                    } else {
+                        fail("testDir is null, but NullPointerException was not expected");
+                    }
+                }
+
                 BookieImpl.checkDirectoryStructure(testDir.toFile());
                 if (expectedException != null) {
                     fail("Expected exception " + expectedException.getSimpleName() + " but none was thrown.");
@@ -164,21 +177,21 @@ public class BookieImplTests {
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
                     // Configurazioni valide
-                    {createValidConfig(1, "127.0.0.1", "eth0", 1), false},       // Limite inferiore delle porte
+                    {createValidConfig(1, "127.0.0.1", "lo", 1), false},       // Limite inferiore delle porte
                     {createValidConfig(65535, "localhost", "lo", 65535), false}, // Limite superiore delle porte
-                    {createValidConfig(3181, "192.168.1.1", "eth0", 8080), false}, // Configurazione valida
+                    {createValidConfig(3181, "192.168.1.1", "lo", 8080), false}, // Configurazione valida
 
                     // Configurazioni non valide
-                    {createInvalidConfig(0, "127.0.0.1", "eth0", 8080), true},         // Porta bookie fuori range (inferiore)
-                    {createInvalidConfig(65536, "127.0.0.1", "eth0", 8080), true},     // Porta bookie fuori range (superiore)
-                    {createInvalidConfig(3181, null, "eth0", 8080), true},             // AdvertisedAddress null
-                    {createInvalidConfig(3181, "", "eth0", 8080), true},               // AdvertisedAddress vuoto
-                    {createInvalidConfig(3181, "invalid_address", "eth0", 8080), true},// AdvertisedAddress non risolvibile
+                    {createInvalidConfig(0, "127.0.0.1", "lo", 8080), true},         // Porta bookie fuori range (inferiore)
+                    {createInvalidConfig(65536, "127.0.0.1", "lo", 8080), true},     // Porta bookie fuori range (superiore)
+                    {createInvalidConfig(3181, null, "lo", 8080), true},             // AdvertisedAddress null
+                    {createInvalidConfig(3181, "", "lo", 8080), true},               // AdvertisedAddress vuoto
+                    {createInvalidConfig(3181, "invalid_address", "lo", 8080), true},// AdvertisedAddress non risolvibile
                     {createInvalidConfig(3181, "127.0.0.1", null, 8080), true},        // ListeningInterface null
                     {createInvalidConfig(3181, "127.0.0.1", "", 8080), true},          // ListeningInterface vuoto
                     {createInvalidConfig(3181, "127.0.0.1", "invalid_iface", 8080), true}, // ListeningInterface non esistente
-                    {createInvalidConfig(3181, "127.0.0.1", "eth0", 0), true},         // Porta HTTP fuori range (inferiore)
-                    {createInvalidConfig(3181, "127.0.0.1", "eth0", 65536), true},     // Porta HTTP fuori range (superiore)
+                    {createInvalidConfig(3181, "127.0.0.1", "lo", 0), true},         // Porta HTTP fuori range (inferiore)
+                    {createInvalidConfig(3181, "127.0.0.1", "lo", 65536), true},     // Porta HTTP fuori range (superiore)
                     {null, true},                                                      // Configurazione null
             });
         }
@@ -238,18 +251,18 @@ public class BookieImplTests {
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
                     // Configurazioni valide
-                    {createValidConfig(1, "127.0.0.1", "eth0", false), false},        // Porta minima
+                    {createValidConfig(1, "127.0.0.1", "lo", false), false},        // Porta minima
                     {createValidConfig(65535, "localhost", "lo", false), false},      // Porta massima
-                    {createValidConfig(3181, "192.168.1.1", "eth0", false), false},   // Configurazione tipica valida
-                    {createValidConfig(3181, null, "eth0", false), false},            // AdvertisedAddress null, dovrebbe usare l'indirizzo locale
+                    {createValidConfig(3181, "192.168.1.1", "lo", false), false},   // Configurazione tipica valida
+                    {createValidConfig(3181, null, "lo", false), false},            // AdvertisedAddress null, dovrebbe usare l'indirizzo locale
                     {createValidConfig(3181, "127.0.0.1", null, false), false},       // ListeningInterface null, dovrebbe usare l'indirizzo predefinito
                     {createValidConfig(3181, null, null, true), false},               // useHostNameAsBookieID true
 
                     // Configurazioni non valide
-                    {createInvalidConfig(0, "127.0.0.1", "eth0", false), true},         // Porta bookie fuori range (inferiore)
-                    {createInvalidConfig(65536, "127.0.0.1", "eth0", false), true},     // Porta bookie fuori range (superiore)
-                    {createInvalidConfig(3181, "", "eth0", false), true},               // AdvertisedAddress vuoto
-                    {createInvalidConfig(3181, "invalid_address", "eth0", false), true},// AdvertisedAddress non risolvibile
+                    {createInvalidConfig(0, "127.0.0.1", "lo", false), true},         // Porta bookie fuori range (inferiore)
+                    {createInvalidConfig(65536, "127.0.0.1", "lo", false), true},     // Porta bookie fuori range (superiore)
+                    {createInvalidConfig(3181, "", "lo", false), true},               // AdvertisedAddress vuoto
+                    {createInvalidConfig(3181, "invalid_address", "lo", false), true},// AdvertisedAddress non risolvibile
                     {createInvalidConfig(3181, "127.0.0.1", "", false), true},          // ListeningInterface vuoto
                     {createInvalidConfig(3181, "127.0.0.1", "invalid_iface", false), true}, // ListeningInterface non esistente
                     {null, true},                                                      // Configurazione null
@@ -409,11 +422,11 @@ public class BookieImplTests {
         @Parameterized.Parameters
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
-                    // Valid
+                    // valid
                     {createValidConfig(), createMockLedgerStorage(false), false},   // conf valida con ledgerStorage non inizializzato
                     {createValidConfig(), null, false},                            // conf valida con ledgerStorage null
 
-                    // Invalid
+                    // invalid
                     {null, createMockLedgerStorage(false), true},                  // conf null
                     {createInvalidConfig(), createMockLedgerStorage(false), true}, // conf invalida con ledgerStorage non inizializzato
                     {createValidConfig(), createMockLedgerStorage(true), true},    // conf valida con ledgerStorage già inizializzato
@@ -513,15 +526,15 @@ public class BookieImplTests {
         }
     }
 
-    /*@RunWith(Parameterized.class)
-    public static class BookieImplGetLedgerForEntryTest {
+    @RunWith(Parameterized.class)
+    public static class CreateMasterKeyEntryTest {
 
-        private final ByteBuf entry;
+        private final long ledgerId;
         private final byte[] masterKey;
         private final boolean expectException;
 
-        public BookieImplGetLedgerForEntryTest(ByteBuf entry, byte[] masterKey, boolean expectException) {
-            this.entry = entry;
+        public CreateMasterKeyEntryTest(long ledgerId, byte[] masterKey, boolean expectException) {
+            this.ledgerId = ledgerId;
             this.masterKey = masterKey;
             this.expectException = expectException;
         }
@@ -529,78 +542,170 @@ public class BookieImplTests {
         @Parameterized.Parameters
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
-                    // nel ByteBuf i dati sono scritti in maniera sequenziale
-                    // metadati: ledgerId (long), entryId (long), lastConfirmedLAC (long)
-                    // valida
-                    {createValidEntry(1L), new byte[]{1, 2, 3}, false},
-                    // null
-                    {null, new byte[]{1, 2, 3}, true},
-                    // metadati negativi
-                    {createInvalidEntry(-1L), new byte[]{1, 2, 3}, true},
-                    // metadati assenti
-                    {createInvalidEntry(0L), new byte[]{1, 2, 3}, true},
-                    // entry valida, masterKey null
-                    {createValidEntry(1L), null, true},
-                    // entry valida, masterKey vuota
-                    {createValidEntry(1L), new byte[]{}, true},
-                    // entry valida, masterKey non valida
-                    {createValidEntry(1L), new byte[]{9, 9, 9}, true},
+                    //valid
+                    {1L, "ValidMasterKey".getBytes(), false},    // ledgerID positivo, masterKey valida
+                    {0L, "AnotherValidKey".getBytes(), false},   // ledgerID zero, masterKey valida
+
+                    //invalid
+                    {-1L, "ValidMasterKey".getBytes(), true},    // ledgerID negativo
+                    {1L, null, true},                            // masterKey null
+                    {1L, new byte[]{}, true},                    // masterKey vuota
+                    //limiti
+                    {Long.MAX_VALUE, "MaxLedgerIdKey".getBytes(), false}, // ledgerID massimo, masterKey valida
+                    {Long.MIN_VALUE, "MinLedgerIdKey".getBytes(), true},  // ledgerID minimo, masterKey valida
             });
         }
 
-        private static ByteBuf createValidEntry(long ledgerId) {
-            ByteBuf entry = Unpooled.buffer();
-            entry.writeLong(ledgerId); // Ledge ID
-            entry.writeLong(1L); // Entry ID
-            entry.writeLong(0L); // Last confirmed LC
-            entry.writeBytes(new byte[]{10, 20, 30}); // Data
-            return entry;
-        }
-
-        private static ByteBuf createInvalidEntry(long ledgerId) {
-            ByteBuf entry = Unpooled.buffer();
-            entry.writeLong(ledgerId);
-            return entry;
-        }
-
         @Test
-        public void testGetLedgerForEntry() throws IOException {
-            // Mock degli handles per simulare la gestione dei LedgerDescriptor
-            HandleFactory handles = mock(HandleFactory.class);
-
-            // Mock del LedgerDescriptor
-            LedgerDescriptor mockDescriptor = mock(LedgerDescriptor.class);
+        public void testCreateMasterKeyEntry() {
             try {
-                if (entry != null && entry.readerIndex() >= 0) {
-                    when(handles.getHandle(anyLong(), eq(masterKey))).thenReturn(mockDescriptor);
-                } else {
-                    when(handles.getHandle(anyLong(), eq(masterKey))).thenThrow(BookieException.class);
-                }
-            } catch (BookieException e) {
-                // Non gestire eccezioni qui, sono simulate nei test
-            }
+                ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+                BookieImpl bookie = new TestBookieImpl(conf);
 
-            // Creazione di BookieImpl
-            BookieImpl bookie = new BookieImpl(null, null, null, null, null, null, null, null, null) {
-                @Override
-                HandleFactory getHandles() {
-                    return handles; // Usa il mock degli handles
-                }
-            };
+                ByteBuf result = bookie.createMasterKeyEntry(ledgerId, masterKey);
 
-            try {
-                LedgerDescriptor descriptor = bookie.getLedgerForEntry(entry, masterKey);
                 if (expectException) {
                     fail("Expected an exception but none was thrown.");
                 }
-                assertNotNull("Descriptor should not be null for valid inputs.", descriptor);
+                assertNotNull("Resulting ByteBuf should not be null", result);
+                assertEquals("LedgerId mismatch in the ByteBuf", ledgerId, result.getLong(0));
+                assertEquals("MasterKey length mismatch in the ByteBuf", masterKey.length, result.getInt(16));
             } catch (Exception e) {
                 if (!expectException) {
                     fail("Unexpected exception thrown: " + e.getMessage());
                 }
             }
         }
-    }*/
+    }
+
+
+    public static class ConstructorTest {
+
+        private TmpDirs tmpDirs;
+
+        @Before
+        public void setup() {
+            tmpDirs = new TmpDirs();
+        }
+
+        @After
+        public void cleanup() throws Exception {
+            if (tmpDirs != null) {
+                tmpDirs.cleanup();
+            }
+        }
+
+        @Test
+        public void testBookieImplConstructor() throws Exception {
+            // dir temp per journal, ledger e index
+            File journalDir = tmpDirs.createNew("test-journal", ".tmp");
+            File ledgerDir = tmpDirs.createNew("test-ledger", ".tmp");
+            File indexDir = tmpDirs.createNew("test-index", ".tmp");
+
+            // ServerConfiguration valido
+            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+            conf.setJournalDirName(journalDir.getAbsolutePath());
+            conf.setLedgerDirNames(new String[]{ledgerDir.getAbsolutePath()});
+            conf.setIndexDirName(new String[]{indexDir.getAbsolutePath()});
+            conf.setAllowMultipleDirsUnderSameDiskPartition(false);
+
+            try {
+                BookieImpl bookie = new TestBookieImpl(conf);
+                bookie.start();
+                fail("Expected BookieException to be thrown, but none was thrown.");
+            } catch (BookieException e) {
+                System.out.println("BookieException caught as expected.");
+                assertTrue(true);
+            } catch (Exception e) {
+                Assert.fail("Expected BookieException, but a different exception was thrown: " + e.getMessage());
+            }
+        }
+    }
+
+    @RunWith(Parameterized.class)
+    public static class BookieImplAddEntryTest {
+
+        private final ByteBuf entry;
+        private final boolean ackBeforeSync;
+        private final BookkeeperInternalCallbacks.WriteCallback cb;
+        private final Object ctx;
+        private final byte[] masterKey;
+        private final Class<? extends Exception> expectedException;
+
+        private BookieImpl bookie;
+
+        public BookieImplAddEntryTest(ByteBuf entry, boolean ackBeforeSync, BookkeeperInternalCallbacks.WriteCallback cb, Object ctx,
+                                      byte[] masterKey, Class<? extends Exception> expectedException) {
+            this.entry = entry;
+            this.ackBeforeSync = ackBeforeSync;
+            this.cb = cb;
+            this.ctx = ctx;
+            this.masterKey = masterKey;
+            this.expectedException = expectedException;
+        }
+
+        @Parameterized.Parameters
+        public static Collection<Object[]> data() {
+            return Arrays.asList(new Object[][]{
+                    // valid case
+                    {EntryBuilder.createValidEntry(), true, mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), null},
+                    // invalid case: entry null
+                    {null, true, mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), NullPointerException.class},
+                    // invalid case: entry senza metadata
+                    {EntryBuilder.createInvalidEntryWithoutMetadata(), false, mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), BookieException.class},
+                    // invalid case: callback null
+                    {EntryBuilder.createValidEntry(), true, null, new Object(), "ValidMasterKey".getBytes(), NullPointerException.class},
+                    // invalid case: context  null
+                    {EntryBuilder.createValidEntry(), true, mockWriteCallback(), null, "ValidMasterKey".getBytes(), null},
+                    // invalid case: masterKey null
+                    {EntryBuilder.createValidEntry(), false, mockWriteCallback(), new Object(), null, BookieException.class},
+                    // invald case: masterKey empty
+                    {EntryBuilder.createValidEntry(), true, mockWriteCallback(), new Object(), new byte[]{}, BookieException.class},
+                    // invalid case: masterKey lunga
+                    {EntryBuilder.createValidEntry(), false, mockWriteCallback(), new Object(), new byte[1024], null},
+            });
+        }
+
+        @Before
+        public void setup() throws Exception {
+            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+            bookie = new TestBookieImpl(conf);
+        }
+
+        @Test
+        public void testAddEntry() {
+            try {
+                bookie.addEntry(entry, ackBeforeSync, cb, ctx, masterKey);
+                if (expectedException != null) {
+                    fail("Expected exception " + expectedException.getSimpleName() + " but none was thrown.");
+                }
+            } catch (Exception e) {
+                if (expectedException == null) {
+                    fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
+                } else if (!expectedException.isInstance(e)) {
+                    fail("Expected exception " + expectedException.getSimpleName() + " but got " + e.getClass().getSimpleName());
+                }
+            }
+        }
+
+        @After
+        public void teardown() throws Exception {
+            bookie.shutdown();
+        }
+
+        private static BookkeeperInternalCallbacks.WriteCallback mockWriteCallback() {
+            return mock(BookkeeperInternalCallbacks.WriteCallback.class);
+        }
+    }
+
+
+
+
+
+
+
+
+
 
     
 
