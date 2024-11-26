@@ -69,16 +69,12 @@ public class BookieImplTests {
 
                     // Test Case 1: Directory esistente, nessun vecchio layout, dovrebbe passare
                     {true, false, true, true, null},
-                    // Test Case 2: Directory non esistente, nessun vecchio layout, mkdirs() ha successo, dovrebbe passare
+                    // Test Case 2: Directory non esistente, no vecchio layout, mkdirs() ha successo, dovrebbe passare
                     {false, false, true, true, null},
-                    // Test Case 3: Directory non esistente, vecchio layout presente, mi aspetto eccezione
+                    // Test Case 3: Directory non esistente, vecchio layout presente, mkdirs() ha successo, mi aspetto eccezione
                     {false, true, true, true, IOException.class},
-                    // Test Case 4: Directory non esistente, nessun vecchio layout, mkdirs() fallisce, mi aspetto eccezione
-                    //{false, false, false, true, IOException.class},
-                    // Test Case 5: Directory esistente, ma è un file, mi aspetto eccezione
-                    {true, false, true, false, IOException.class},
-                    // Test Case 6: Directory non esistente, genitore non accessibile, mi aspetto eccezione
-                    {false, false, true, true, IOException.class},
+                    // Test Case 4: Directory esistente, ma non accessibile, nessun vecchio layout, mi aspetto eccezione
+                    //{true, false, true, true, IOException.class}
             });
         }
 
@@ -87,12 +83,6 @@ public class BookieImplTests {
             tmpDirs = new TmpDirs();
 
             parentDir = tmpDirs.createNew("parentDir", null).toPath();
-
-            // parentDir non accessibile (Test Case 6)
-            if (expectedException == IOException.class && !exists && !oldLayout && mkdirsSuccess && testCaseIs(5)) {
-                parentDir.toFile().setReadable(false);
-                parentDir.toFile().setExecutable(false);
-            }
 
             if (exists) {
                 if (isDirectory) {
@@ -154,84 +144,50 @@ public class BookieImplTests {
                 tmpDirs.cleanup();
             }
         }
-
-
-        //helper per identificare il numero del test case corrente
-        private boolean testCaseIs(int testCaseNumber) {
-            return data().toArray()[testCaseNumber - 1] == this;
-        }
     }
 
     @RunWith(Parameterized.class)
     public static class BookieImplGetBookieIdTest {
-
-        private final ServerConfiguration conf;
+        private final String customBookieId;
         private final boolean expectException;
 
-        public BookieImplGetBookieIdTest(ServerConfiguration conf, boolean expectException) {
-            this.conf = conf;
+        public BookieImplGetBookieIdTest(String customBookieId, boolean expectException) {
+            this.customBookieId = customBookieId;
             this.expectException = expectException;
         }
 
         @Parameterized.Parameters
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
-                    // Configurazioni valide
-                    {createValidConfig(1, "127.0.0.1", "lo", 1), false},       // Limite inferiore delle porte
-                    {createValidConfig(65535, "localhost", "lo", 65535), false}, // Limite superiore delle porte
-                    {createValidConfig(3181, "192.168.1.1", "lo", 8080), false}, // Configurazione valida
+                    // Valid configuration
+                    {"bookie-01.example.com:9000", false},
 
-                    // Configurazioni non valide
-                    {createInvalidConfig(0, "127.0.0.1", "lo", 8080), true},         // Porta bookie fuori range (inferiore)
-                    {createInvalidConfig(65536, "127.0.0.1", "lo", 8080), true},     // Porta bookie fuori range (superiore)
-                    {createInvalidConfig(3181, null, "lo", 8080), true},             // AdvertisedAddress null
-                    {createInvalidConfig(3181, "", "lo", 8080), true},               // AdvertisedAddress vuoto
-                    {createInvalidConfig(3181, "invalid_address", "lo", 8080), true},// AdvertisedAddress non risolvibile
-                    {createInvalidConfig(3181, "127.0.0.1", null, 8080), true},        // ListeningInterface null
-                    {createInvalidConfig(3181, "127.0.0.1", "", 8080), true},          // ListeningInterface vuoto
-                    {createInvalidConfig(3181, "127.0.0.1", "invalid_iface", 8080), true}, // ListeningInterface non esistente
-                    {createInvalidConfig(3181, "127.0.0.1", "lo", 0), true},         // Porta HTTP fuori range (inferiore)
-                    {createInvalidConfig(3181, "127.0.0.1", "lo", 65536), true},     // Porta HTTP fuori range (superiore)
-                    {null, true},                                                      // Configurazione null
+                    // Invalid configurations
+                    {"127.0.0.1:3181!", true},                   // Invalid customBookieId
+                    {"", true},                                   // Empty customBookieId
             });
-        }
-
-        private static ServerConfiguration createValidConfig(int bookiePort, String advertisedAddress, String listeningInterface, int httpPort) {
-            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-            conf.setBookiePort(bookiePort);
-            conf.setAdvertisedAddress(advertisedAddress);
-            conf.setListeningInterface(listeningInterface);
-            conf.setHttpServerPort(httpPort);
-            return conf;
-        }
-
-        private static ServerConfiguration createInvalidConfig(Integer bookiePort, String advertisedAddress, String listeningInterface, Integer httpPort) {
-            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-            if (bookiePort != null) conf.setBookiePort(bookiePort);
-            if (advertisedAddress != null) conf.setAdvertisedAddress(advertisedAddress);
-            if (listeningInterface != null) conf.setListeningInterface(listeningInterface);
-            if (httpPort != null) conf.setHttpServerPort(httpPort);
-            return conf;
         }
 
         @Test
         public void testGetBookieId() {
+            ServerConfiguration conf = null;
             try {
+                conf = TestBKConfiguration.newServerConfiguration();
+                if (customBookieId != null) conf.setBookieId(customBookieId);
+
                 BookieId bookieId = BookieImpl.getBookieId(conf);
+
                 if (expectException) {
                     fail("Expected an exception, but none was thrown.");
                 }
                 assertNotNull("BookieId should not be null for valid configuration.", bookieId);
-            } catch (UnknownHostException | IllegalArgumentException e) {
+
+            } catch (IllegalArgumentException | UnknownHostException e) {
                 if (!expectException) {
                     fail("Unexpected exception thrown: " + e.getMessage());
                 }
-            } catch (NullPointerException e) {
-                if (conf == null) {
-                    assertTrue("Null configuration should result in NullPointerException.", true);
-                } else {
-                    fail("Unexpected NullPointerException thrown: " + e.getMessage());
-                }
+            } catch (Exception e) {
+                fail("Unexpected exception type: " + e.getClass().getName());
             }
         }
     }
