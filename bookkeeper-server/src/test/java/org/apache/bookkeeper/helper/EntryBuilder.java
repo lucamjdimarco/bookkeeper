@@ -61,15 +61,11 @@ public class EntryBuilder {
     // builder per istanza non valida --> metadati assenti
     public static ByteBuf createInvalidEntryWithoutMetadata() {
         byte[] data = "DataWithoutMetadata".getBytes();
-        byte[] authCode = "MissingMetadata".getBytes();
 
         int dataSize = data.length;
-        int authCodeSize = authCode.length;
 
-        ByteBuf entry = Unpooled.buffer(dataSize + authCodeSize);
+        ByteBuf entry = Unpooled.buffer(dataSize);
         entry.writeBytes(data);
-
-        entry.writeBytes(authCode);
 
         return entry;
     }

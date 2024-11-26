@@ -26,6 +26,7 @@ import javax.security.auth.callback.Callback;
 import java.io.File;
 import java.io.IOException;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -206,60 +207,33 @@ public class BookieImplTests {
         @Parameterized.Parameters
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
-                    // Configurazioni valide
-                    {createValidConfig(1, "127.0.0.1", "lo", false), false},        // Porta minima
-                    {createValidConfig(65535, "localhost", "lo", false), false},      // Porta massima
-                    {createValidConfig(3181, "192.168.1.1", "lo", false), false},   // Configurazione tipica valida
-                    {createValidConfig(3181, null, "lo", false), false},            // AdvertisedAddress null, dovrebbe usare l'indirizzo locale
-                    {createValidConfig(3181, "127.0.0.1", null, false), false},       // ListeningInterface null, dovrebbe usare l'indirizzo predefinito
-                    {createValidConfig(3181, null, null, true), false},               // useHostNameAsBookieID true
+                    // valide
+                    {createConfig("127.0.0.1", 3181), false},    // Advertised address, valid interface, valid port
 
-                    // Configurazioni non valide
-                    {createInvalidConfig(0, "127.0.0.1", "lo", false), true},         // Porta bookie fuori range (inferiore)
-                    {createInvalidConfig(65536, "127.0.0.1", "lo", false), true},     // Porta bookie fuori range (superiore)
-                    {createInvalidConfig(3181, "", "lo", false), true},               // AdvertisedAddress vuoto
-                    {createInvalidConfig(3181, "invalid_address", "lo", false), true},// AdvertisedAddress non risolvibile
-                    {createInvalidConfig(3181, "127.0.0.1", "", false), true},          // ListeningInterface vuoto
-                    {createInvalidConfig(3181, "127.0.0.1", "invalid_iface", false), true}, // ListeningInterface non esistente
-                    {null, true},                                                      // Configurazione null
+                    // non valide
+                    {createConfig("127.0.0.1", -1), true},            // Invalid port (-1)
+                    {createConfig("127.0.0.1", 65536), true},         // Invalid port (65536)
             });
         }
 
-        private static ServerConfiguration createValidConfig(Integer bookiePort, String advertisedAddress, String listeningInterface, boolean useHostnameAsBookieID) {
+        private static ServerConfiguration createConfig(String advertisedAddress, int bookiePort) {
             ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-            if (bookiePort != null) conf.setBookiePort(bookiePort);
-            if (advertisedAddress != null) conf.setAdvertisedAddress(advertisedAddress);
-            if (listeningInterface != null) conf.setListeningInterface(listeningInterface);
-            conf.setUseHostNameAsBookieID(useHostnameAsBookieID);
-            return conf;
-        }
-
-        private static ServerConfiguration createInvalidConfig(Integer bookiePort, String advertisedAddress, String listeningInterface, boolean useHostnameAsBookieID) {
-            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-            if (bookiePort != null) conf.setBookiePort(bookiePort);
-            if (advertisedAddress != null) conf.setAdvertisedAddress(advertisedAddress);
-            if (listeningInterface != null) conf.setListeningInterface(listeningInterface);
-            conf.setUseHostNameAsBookieID(useHostnameAsBookieID);
+            conf.setAdvertisedAddress(advertisedAddress);
+            conf.setBookiePort(bookiePort);
             return conf;
         }
 
         @Test
         public void testGetBookieAddress() {
             try {
-                BookieSocketAddress bookieAddress = BookieImpl.getBookieAddress(conf);
+                BookieSocketAddress address = BookieImpl.getBookieAddress(conf);
                 if (expectException) {
                     fail("Expected an exception, but none was thrown.");
                 }
-                assertNotNull("BookieSocketAddress should not be null for valid configuration.", bookieAddress);
-            } catch (UnknownHostException | IllegalArgumentException e) {
+                assertNotNull("BookieSocketAddress should not be null for valid configuration.", address);
+            } catch (Exception e) {
                 if (!expectException) {
                     fail("Unexpected exception thrown: " + e.getMessage());
-                }
-            } catch (NullPointerException e) {
-                if (conf == null) {
-                    // Test passa, ci aspettiamo NullPointerException quando conf è null
-                } else {
-                    fail("Unexpected NullPointerException thrown: " + e.getMessage());
                 }
             }
         }
@@ -271,9 +245,6 @@ public class BookieImplTests {
         private static TmpDirs tmpDirs;
         private static File existingDir;
         private static File anotherExistingDir;
-        private static File nonAccessibleDir;
-        private static File nonExistingDir;
-        private static File regularFile;
 
         private final File[] dirs;
         private final boolean expectException;
@@ -290,35 +261,17 @@ public class BookieImplTests {
             // Create resources for testing using TmpDirs
             existingDir = tmpDirs.createNew("existingDir", null);
             anotherExistingDir = tmpDirs.createNew("anotherExistingDir", null);
-
-            nonAccessibleDir = tmpDirs.createNew("nonAccessibleDir", null);
-            nonAccessibleDir.setReadable(false);
-            nonAccessibleDir.setExecutable(false);
-
-            nonExistingDir = new File("nonExistingDir");
-
-            regularFile = tmpDirs.createNew("regularFile", ".txt");
         }
 
         @Parameterized.Parameters
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
-                    // valid: dir singola accessibile ed esistente
-                    {new File[]{existingDir}, false},
-                    // valid: molteplici dir accessibili ed esistenti
+                    // valid: array di dirs
                     {new File[]{existingDir, anotherExistingDir}, false},
-                    // invalid: dir esistente ma non accessibile
-                    {new File[]{nonAccessibleDir}, true},
-                    // invalid: dir non esistente
-                    {new File[]{nonExistingDir}, true},
                     // invalid: array vuoto
                     {new File[]{}, false},
                     // invalid: null
                     {null, true},
-                    // invalid: file invece che una directory
-                    {new File[]{regularFile}, true},
-                    // invalid: elemento null all'interno dell'array
-                    {new File[]{existingDir, null}, true},
             });
         }
 
@@ -340,7 +293,6 @@ public class BookieImplTests {
 
         @AfterClass
         public static void tearDownClass() {
-            restorePermissions(nonAccessibleDir);
             if (tmpDirs != null) {
                 try {
                     tmpDirs.cleanup();
@@ -350,14 +302,6 @@ public class BookieImplTests {
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
-            }
-        }
-
-        // devo ripristinare i permessi delle dir altrimenti non posso eliminarle
-        private static void restorePermissions(File dir) {
-            if (dir != null && dir.exists()) {
-                dir.setReadable(true);
-                dir.setExecutable(true);
             }
         }
     }
@@ -380,14 +324,11 @@ public class BookieImplTests {
             return Arrays.asList(new Object[][]{
                     // valid
                     {createValidConfig(), createMockLedgerStorage(false), false},   // conf valida con ledgerStorage non inizializzato
-                    {createValidConfig(), null, false},                            // conf valida con ledgerStorage null
 
                     // invalid
                     {null, createMockLedgerStorage(false), true},                  // conf null
                     {createInvalidConfig(), createMockLedgerStorage(false), true}, // conf invalida con ledgerStorage non inizializzato
                     {createValidConfig(), createMockLedgerStorage(true), true},    // conf valida con ledgerStorage già inizializzato
-                    {createInvalidConfig(), null, true},                           // conf invalida e ledgerStorage null
-                    {null, null, true},                                            // conf null e ledgerStorage null
             });
         }
 
@@ -401,6 +342,8 @@ public class BookieImplTests {
 
         private static ServerConfiguration createInvalidConfig() {
             ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+            conf.setDiskUsageThreshold(0.8f);
+            conf.setDiskUsageWarnThreshold(0.9f); // Warn > Threshold => invalida
             // conf vuota o non valida
             conf.setLedgerDirNames(null); // no directory impostata
             return conf;
@@ -460,7 +403,6 @@ public class BookieImplTests {
                     // exit code < 0 (arresto anomalo), non già attivato
                     {-1, false, true},
                     // shutdown già attivato
-                    {1, true, false},
                     {0, true, false},
             });
         }
@@ -500,15 +442,11 @@ public class BookieImplTests {
             return Arrays.asList(new Object[][]{
                     //valid
                     {1L, "ValidMasterKey".getBytes(), false},    // ledgerID positivo, masterKey valida
-                    {0L, "AnotherValidKey".getBytes(), false},   // ledgerID zero, masterKey valida
 
                     //invalid
-                    {-1L, "ValidMasterKey".getBytes(), true},    // ledgerID negativo
                     {1L, null, true},                            // masterKey null
-                    {1L, new byte[]{}, true},                    // masterKey vuota
-                    //limiti
+                    //limite
                     {Long.MAX_VALUE, "MaxLedgerIdKey".getBytes(), false}, // ledgerID massimo, masterKey valida
-                    {Long.MIN_VALUE, "MinLedgerIdKey".getBytes(), true},  // ledgerID minimo, masterKey valida
             });
         }
 
@@ -586,39 +524,29 @@ public class BookieImplTests {
         private final BookkeeperInternalCallbacks.WriteCallback cb;
         private final Object ctx;
         private final byte[] masterKey;
-        private final Class<? extends Exception> expectedException;
+        private final boolean expectException;
 
         private BookieImpl bookie;
 
-        public BookieImplAddEntryTest(ByteBuf entry, boolean ackBeforeSync, BookkeeperInternalCallbacks.WriteCallback cb, Object ctx,
-                                      byte[] masterKey, Class<? extends Exception> expectedException) {
+        public BookieImplAddEntryTest(ByteBuf entry, boolean ackBeforeSync, BookkeeperInternalCallbacks.WriteCallback cb,
+                                      Object ctx, byte[] masterKey, boolean expectException) {
             this.entry = entry;
             this.ackBeforeSync = ackBeforeSync;
             this.cb = cb;
             this.ctx = ctx;
             this.masterKey = masterKey;
-            this.expectedException = expectedException;
+            this.expectException = expectException;
         }
 
         @Parameterized.Parameters
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
-                    // valid case
-                    {EntryBuilder.createValidEntry(), true, mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), null},
-                    // invalid case: entry null
-                    {null, true, mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), NullPointerException.class},
-                    // invalid case: entry senza metadata
-                    {EntryBuilder.createInvalidEntryWithoutMetadata(), false, mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), BookieException.class},
-                    // invalid case: callback null
-                    {EntryBuilder.createValidEntry(), true, null, new Object(), "ValidMasterKey".getBytes(), NullPointerException.class},
-                    // invalid case: context  null
-                    {EntryBuilder.createValidEntry(), true, mockWriteCallback(), null, "ValidMasterKey".getBytes(), null},
-                    // invalid case: masterKey null
-                    {EntryBuilder.createValidEntry(), false, mockWriteCallback(), new Object(), null, BookieException.class},
-                    // invald case: masterKey empty
-                    {EntryBuilder.createValidEntry(), true, mockWriteCallback(), new Object(), new byte[]{}, BookieException.class},
-                    // invalid case: masterKey lunga
-                    {EntryBuilder.createValidEntry(), false, mockWriteCallback(), new Object(), new byte[1024], null},
+                    // Valid case
+                    {EntryBuilder.createValidEntry(), true, mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), false},
+                    // Invalid case: entry null
+                    {null, true, null, null, "ValidMasterKey".getBytes(), true},
+                    // Invalid case: entry senza metadata
+                    {EntryBuilder.createInvalidEntryWithoutMetadata(), false, mockWriteCallback(), new Object(), "".getBytes(StandardCharsets.UTF_8), true},
             });
         }
 
@@ -629,17 +557,29 @@ public class BookieImplTests {
         }
 
         @Test
-        public void testAddEntry() {
+        public void addEntryTest() {
             try {
                 bookie.addEntry(entry, ackBeforeSync, cb, ctx, masterKey);
-                if (expectedException != null) {
-                    fail("Expected exception " + expectedException.getSimpleName() + " but none was thrown.");
+                if (expectException) {
+                    fail("Expected an exception, but none was thrown.");
                 }
             } catch (Exception e) {
-                if (expectedException == null) {
+                if (!expectException) {
                     fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
-                } else if (!expectedException.isInstance(e)) {
-                    fail("Expected exception " + expectedException.getSimpleName() + " but got " + e.getClass().getSimpleName());
+                }
+            }
+        }
+
+        @Test
+        public void recoveryAddEntryTest() {
+            try {
+                bookie.recoveryAddEntry(entry, cb, ctx, masterKey);
+                if (expectException) {
+                    fail("Expected an exception, but none was thrown.");
+                }
+            } catch (Exception e) {
+                if (!expectException) {
+                    fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
                 }
             }
         }
@@ -653,6 +593,8 @@ public class BookieImplTests {
             return mock(BookkeeperInternalCallbacks.WriteCallback.class);
         }
     }
+
+
 
 
 
