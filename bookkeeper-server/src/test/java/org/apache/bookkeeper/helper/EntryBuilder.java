@@ -7,9 +7,9 @@ public class EntryBuilder {
 
     // builder per istanza valida
     public static ByteBuf createValidEntry() {
-        long ledgerId = 1L;
-        long entryId = 10L;
-        long lastConfirmed = 9L;
+        long ledgerId = 0L;
+        long entryId = 0L;
+        long lastConfirmed = 0L;
         byte[] data = "ValidData".getBytes();
         byte[] authCode = "ValidAuth".getBytes();
 
@@ -68,5 +68,32 @@ public class EntryBuilder {
         entry.writeBytes(data);
 
         return entry;
+    }
+
+
+    public static long extractLedgerId(ByteBuf entry) {
+        // Salva l'indice di lettura corrente
+        int readerIndex = entry.readerIndex();
+        try {
+            // Sposta il lettore alla posizione iniziale per leggere ledgerId
+            entry.readerIndex(0);
+            return entry.readLong();
+        } finally {
+            // Ripristina l'indice di lettura originale
+            entry.readerIndex(readerIndex);
+        }
+    }
+
+    public static long extractEntryId(ByteBuf entry) {
+        // Salva l'indice di lettura corrente
+        int readerIndex = entry.readerIndex();
+        try {
+            // Sposta il lettore alla posizione del secondo long per leggere entryId
+            entry.readerIndex(Long.BYTES); // LedgerId è il primo Long, quindi saltiamo quello
+            return entry.readLong();
+        } finally {
+            // Ripristina l'indice di lettura originale
+            entry.readerIndex(readerIndex);
+        }
     }
 }

@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
+import org.apache.bookkeeper.common.util.Watcher;
 import org.apache.bookkeeper.conf.ServerConfiguration;
 import org.apache.bookkeeper.conf.TestBKConfiguration;
 import org.apache.bookkeeper.discover.BookieServiceInfo;
@@ -16,11 +17,14 @@ import org.apache.bookkeeper.stats.NullStatsLogger;
 import org.apache.bookkeeper.stats.StatsLogger;
 import org.apache.bookkeeper.test.TmpDirs;
 import org.apache.bookkeeper.util.DiskChecker;
+import org.awaitility.Awaitility;
 import org.junit.*;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.security.auth.callback.Callback;
 import java.io.File;
@@ -33,13 +37,19 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 @RunWith(value = Enclosed.class)
 public class BookieImplTests {
+
+    private static final Logger LOG = LoggerFactory.getLogger(BookieImplTests.class);
 
     @RunWith(Parameterized.class)
     public static class TestCheckDirectoryStructure {
@@ -516,8 +526,8 @@ public class BookieImplTests {
         }
     }
 
-    @RunWith(Parameterized.class)
-    public static class BookieImplAddEntryTest {
+    /*@RunWith(Parameterized.class)
+    public static class BookieImplAddEntryAndRecoveryAddEntryTest {
 
         private final ByteBuf entry;
         private final boolean ackBeforeSync;
@@ -528,7 +538,7 @@ public class BookieImplTests {
 
         private BookieImpl bookie;
 
-        public BookieImplAddEntryTest(ByteBuf entry, boolean ackBeforeSync, BookkeeperInternalCallbacks.WriteCallback cb,
+        public BookieImplAddEntryAndRecoveryAddEntryTest(ByteBuf entry, boolean ackBeforeSync, BookkeeperInternalCallbacks.WriteCallback cb,
                                       Object ctx, byte[] masterKey, boolean expectException) {
             this.entry = entry;
             this.ackBeforeSync = ackBeforeSync;
@@ -592,7 +602,331 @@ public class BookieImplTests {
         private static BookkeeperInternalCallbacks.WriteCallback mockWriteCallback() {
             return mock(BookkeeperInternalCallbacks.WriteCallback.class);
         }
+    }*/
+
+    @RunWith(Parameterized.class)
+    public static class BookieImplExplicitLacIntegrationTest {
+
+        private final long ledgerId;
+        private final ByteBuf explicitLac;
+        private final BookkeeperInternalCallbacks.WriteCallback writeCallback;
+        private final Object ctx;
+        private final byte[] masterKey;
+        private final boolean expectException;
+
+        private BookieImpl bookie;
+
+        public BookieImplExplicitLacIntegrationTest(long ledgerId, ByteBuf explicitLac,
+                                                    BookkeeperInternalCallbacks.WriteCallback writeCallback,
+                                                    Object ctx, byte[] masterKey, boolean expectException) {
+            this.ledgerId = ledgerId;
+            this.explicitLac = explicitLac;
+            this.writeCallback = writeCallback;
+            this.ctx = ctx;
+            this.masterKey = masterKey;
+            this.expectException = expectException;
+        }
+
+        @Parameterized.Parameters
+        public static Collection<Object[]> data() {
+            return Arrays.asList(new Object[][]{
+                    // valid
+                    {1L, EntryBuilder.createValidEntry(), mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), false},
+                    // invalid
+                    {1L, null, null, null, "".getBytes(), true},
+                    {1L, EntryBuilder.createInvalidEntryWithoutMetadata(), null, new Object(), null, true},
+                    {-1L, EntryBuilder.createValidEntry(), mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), true},
+            });
+        }
+
+        @Before
+        public void setup() throws Exception {
+            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+            bookie = new TestBookieImpl(conf);
+        }
+
+        @Test
+        public void testExplicitLacWorkflow() {
+            try {
+                if (ledgerId < 0) {
+                    assertTrue("Negative ledgerId should result in exception.", expectException);
+                    return;
+                }
+
+                // ExplicitLACEntry
+                ByteBuf lacEntry = bookie.createExplicitLACEntry(ledgerId, explicitLac);
+                assertNotNull("ExplicitLACEntry should not be null for valid inputs", lacEntry);
+
+                // SetExplicitLac
+                bookie.setExplicitLac(Unpooled.copiedBuffer(lacEntry), writeCallback, ctx, masterKey);
+
+                byte[] content = new byte[lacEntry.readableBytes()];
+                lacEntry.getBytes(lacEntry.readerIndex(), content);
+
+                // GetExplicitLac
+                ByteBuf retrievedLac = bookie.getExplicitLac(ledgerId);
+
+                // assert --> LAC è lo stesso dell'originale
+                assertEquals(new String(content, StandardCharsets.UTF_8),
+                        new String(retrievedLac.array(), StandardCharsets.UTF_8));
+                assertFalse(this.expectException);
+            } catch (Exception e) {
+                if (!expectException) {
+                    fail("Unexpected exception thrown: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                }
+            }
+        }
+
+        @After
+        public void teardown() throws Exception {
+            bookie.shutdown();
+        }
+
+        private static BookkeeperInternalCallbacks.WriteCallback mockWriteCallback() {
+            return mock(BookkeeperInternalCallbacks.WriteCallback.class);
+        }
     }
+
+    /*@RunWith(Parameterized.class)
+    public static class BookieImplReadLastAddConfirmedTest {
+
+        private final long ledgerId;
+        private final boolean expectException;
+        private final long expectedLastAddConfirmed;
+        private TestBookieImpl bookie;
+
+        private final TmpDirs tmpDirs=new TmpDirs();
+
+        public BookieImplReadLastAddConfirmedTest(long ledgerId, boolean expectException, long expectedLastAddConfirmed) {
+            this.ledgerId = ledgerId;
+            this.expectException = expectException;
+            this.expectedLastAddConfirmed = expectedLastAddConfirmed;
+        }
+
+        @Parameterized.Parameters
+        public static Collection<Object[]> data() {
+            return Arrays.asList(new Object[][]{
+                    {1L, false, 10L},
+                    {0L, true, -1L},
+                    {-1L, true, -1L},
+                    {2L, true, -1L},
+            });
+        }
+
+        @Before
+        public void setup() throws Exception {
+            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+
+            bookie = new TestBookieImpl(conf);
+            bookie.start();
+
+            if (ledgerId > 0 && !expectException) {
+                ByteBuf entryToAdd = EntryBuilder.createValidEntry();
+                for (long i = 0; i <= expectedLastAddConfirmed; i++) {
+                    bookie.addEntry(
+                            EntryBuilder.createValidEntry(),
+                            false,
+                            (rc, ledgerId, entryId, addr, ctx) -> {},
+                            null,
+                            "ValidMasterKey".getBytes(StandardCharsets.UTF_8));
+                }
+            }
+        }
+
+        @Test
+        public void testReadLastAddConfirmed() {
+            try {
+                long lastAddConfirmed = bookie.readLastAddConfirmed(ledgerId);
+                if (expectException) {
+                    fail("Expected an exception, but none was thrown.");
+                }
+                assertEquals("LastAddConfirmed value should match the expected value.",
+                        expectedLastAddConfirmed, lastAddConfirmed);
+            } catch (Exception e) {
+                if (!expectException) {
+                    fail("Unexpected exception thrown: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                }
+            }
+        }
+
+        @After
+        public void teardown() {
+            try {
+                bookie.shutdown();
+            } catch (Exception e) {
+                fail("Failed to shutdown BookieImpl: " + e.getMessage());
+            }
+        }
+    }*/
+
+
+
+    @RunWith(Parameterized.class)
+    public static class BookieImplEntryIntegrationTest {
+
+        private final ByteBuf entry;
+        private final boolean ackBeforeSync;
+        private final BookkeeperInternalCallbacks.WriteCallback cb;
+        private final Object ctx;
+        private final byte[] masterKey;
+
+        private final Long testLedgerId;
+        private final boolean useWatcher;
+        private final boolean expectException;
+
+        private BookieImpl bookie;
+
+        public BookieImplEntryIntegrationTest(ByteBuf entry, boolean ackBeforeSync, BookkeeperInternalCallbacks.WriteCallback cb,
+                                                         Object ctx, byte[] masterKey, Long testLedgerId, boolean useWatcher, boolean expectException) {
+            this.entry = entry;
+            this.ackBeforeSync = ackBeforeSync;
+            this.cb = cb;
+            this.ctx = ctx;
+            this.masterKey = masterKey;
+            this.testLedgerId = testLedgerId;
+            this.useWatcher = useWatcher;
+            this.expectException = expectException;
+        }
+
+        @Parameterized.Parameters
+        public static Collection<Object[]> data() {
+            return Arrays.asList(new Object[][]{
+                    // valid case
+                    {EntryBuilder.createValidEntry(), true, mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), null, true, false},
+                    // invalid case
+                    {null, true, null, null, "ValidMasterKey".getBytes(), -1L, true, true},
+                    {EntryBuilder.createInvalidEntryWithoutMetadata(), false, mockWriteCallback(), new Object(), "".getBytes(StandardCharsets.UTF_8), null, false, true},
+            });
+        }
+
+        @Before
+        public void setup() throws Exception {
+            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+            bookie = new TestBookieImpl(conf);
+        }
+
+        @Test
+        public void addEntryAndReadEntryTest() {
+            try {
+                // addEntry
+                bookie.addEntry(entry, ackBeforeSync, cb, ctx, masterKey);
+
+                if (expectException) {
+                    fail("Expected an exception, but none was thrown.");
+                }
+
+
+                if (!expectException) {
+                    //long ledgerId = EntryBuilder.extractLedgerId(entry);
+                    long ledgerId = (testLedgerId != null) ? testLedgerId : EntryBuilder.extractLedgerId(entry);
+                    long entryId = EntryBuilder.extractEntryId(entry);
+
+                    ByteBuf result = bookie.readEntry(ledgerId, entryId);
+                    assertNotNull("Resulting ByteBuf should not be null for valid inputs.", result);
+
+                    byte[] addedContent = new byte[entry.readableBytes()];
+                    entry.getBytes(entry.readerIndex(), addedContent);
+
+                    byte[] readContent = new byte[result.readableBytes()];
+                    result.getBytes(result.readerIndex(), readContent);
+
+                    String addedContentStr = new String(addedContent, StandardCharsets.UTF_8);
+                    String readContentStr = new String(readContent, StandardCharsets.UTF_8);
+
+                    assertEquals("The read content should match the added content.", addedContentStr, readContentStr);
+
+                    // Test readLastAddConfirmed
+                    //long lastAddConfirmed = bookie.readLastAddConfirmed(ledgerId);
+                    //assertEquals("LastAddConfirmed should be the same as the entry ID.", entryId, lastAddConfirmed);
+                    // Test readLastAddConfirmed
+                    if (testLedgerId == null) {
+                        long lastAddConfirmed = bookie.readLastAddConfirmed(ledgerId);
+                        assertEquals("LastAddConfirmed should be the same as the entry ID.", entryId, lastAddConfirmed);
+
+                        // Test waitForLastAddConfirmedUpdate
+                        AtomicBoolean watcherNotified = new AtomicBoolean(false);
+                        //Watcher<LastAddConfirmedUpdateNotification> watcher = notification -> watcherNotified.set(true);
+                        Watcher<LastAddConfirmedUpdateNotification> watcher = useWatcher
+                                ? notification -> watcherNotified.set(true)
+                                : null;
+
+                        boolean updateResult = bookie.waitForLastAddConfirmedUpdate(ledgerId, lastAddConfirmed, watcher);
+                        assertTrue("Watcher should detect an update.", updateResult);
+
+                        // Test cancelWaitForLastAddConfirmedUpdate
+                        bookie.cancelWaitForLastAddConfirmedUpdate(ledgerId, watcher);
+                        watcherNotified.set(false);
+
+                        // try updating LAC and confirm watcher is not notified after cancellation
+                        bookie.addEntry(entry, ackBeforeSync, cb, ctx, masterKey);
+                        assertFalse("Watcher should not be notified after cancellation.", watcherNotified.get());
+                    } else {
+                        // ledger ID is invalid
+                        try {
+                            bookie.readLastAddConfirmed(ledgerId);
+                            fail("Expected exception for invalid ledger ID.");
+                        } catch (IOException | BookieException e) {
+                            assertTrue("Correct exception for invalid ledger ID.", true);
+                        }
+
+                        try {
+                            bookie.waitForLastAddConfirmedUpdate(ledgerId, 0L, null);
+                            fail("Expected exception for invalid ledger ID.");
+                        } catch (IOException e) {
+                            assertTrue("Correct exception for invalid ledger ID.", true);
+                        }
+
+                        try {
+                            bookie.cancelWaitForLastAddConfirmedUpdate(ledgerId, null);
+                            fail("Expected exception for invalid ledger ID.");
+                        } catch (IOException e) {
+                            assertTrue("Correct exception for invalid ledger ID.", true);
+                        }
+                    }
+
+
+                }
+
+            } catch (Exception e) {
+                if (!expectException) {
+                    fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
+                }
+            }
+        }
+
+        @Test
+        public void recoveryAddEntryTest() {
+            try {
+                bookie.recoveryAddEntry(entry, cb, ctx, masterKey);
+                if (expectException) {
+                    fail("Expected an exception, but none was thrown.");
+                }
+            } catch (Exception e) {
+                if (!expectException) {
+                    fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
+                }
+            }
+        }
+
+        @After
+        public void teardown() throws Exception {
+            bookie.shutdown();
+        }
+
+        private static BookkeeperInternalCallbacks.WriteCallback mockWriteCallback() {
+            return (rc, ledgerId, entryId, addr, ctx) -> {
+                if (rc != 0) {
+                    fail("WriteCallback failed with result code: " + rc);
+                }
+            };
+        }
+    }
+
+
+
+
+
+
 
 
 
