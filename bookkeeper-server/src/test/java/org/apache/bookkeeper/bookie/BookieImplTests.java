@@ -27,8 +27,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.security.auth.callback.Callback;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -42,6 +44,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.concurrent.CompletableFuture;
 
+
+import static org.apache.bookkeeper.bookie.BookieImplTests.Enum.*;
 import static org.junit.Assert.*;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
@@ -526,84 +530,6 @@ public class BookieImplTests {
         }
     }
 
-    /*@RunWith(Parameterized.class)
-    public static class BookieImplAddEntryAndRecoveryAddEntryTest {
-
-        private final ByteBuf entry;
-        private final boolean ackBeforeSync;
-        private final BookkeeperInternalCallbacks.WriteCallback cb;
-        private final Object ctx;
-        private final byte[] masterKey;
-        private final boolean expectException;
-
-        private BookieImpl bookie;
-
-        public BookieImplAddEntryAndRecoveryAddEntryTest(ByteBuf entry, boolean ackBeforeSync, BookkeeperInternalCallbacks.WriteCallback cb,
-                                      Object ctx, byte[] masterKey, boolean expectException) {
-            this.entry = entry;
-            this.ackBeforeSync = ackBeforeSync;
-            this.cb = cb;
-            this.ctx = ctx;
-            this.masterKey = masterKey;
-            this.expectException = expectException;
-        }
-
-        @Parameterized.Parameters
-        public static Collection<Object[]> data() {
-            return Arrays.asList(new Object[][]{
-                    // Valid case
-                    {EntryBuilder.createValidEntry(), true, mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), false},
-                    // Invalid case: entry null
-                    {null, true, null, null, "ValidMasterKey".getBytes(), true},
-                    // Invalid case: entry senza metadata
-                    {EntryBuilder.createInvalidEntryWithoutMetadata(), false, mockWriteCallback(), new Object(), "".getBytes(StandardCharsets.UTF_8), true},
-            });
-        }
-
-        @Before
-        public void setup() throws Exception {
-            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-            bookie = new TestBookieImpl(conf);
-        }
-
-        @Test
-        public void addEntryTest() {
-            try {
-                bookie.addEntry(entry, ackBeforeSync, cb, ctx, masterKey);
-                if (expectException) {
-                    fail("Expected an exception, but none was thrown.");
-                }
-            } catch (Exception e) {
-                if (!expectException) {
-                    fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
-                }
-            }
-        }
-
-        @Test
-        public void recoveryAddEntryTest() {
-            try {
-                bookie.recoveryAddEntry(entry, cb, ctx, masterKey);
-                if (expectException) {
-                    fail("Expected an exception, but none was thrown.");
-                }
-            } catch (Exception e) {
-                if (!expectException) {
-                    fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
-                }
-            }
-        }
-
-        @After
-        public void teardown() throws Exception {
-            bookie.shutdown();
-        }
-
-        private static BookkeeperInternalCallbacks.WriteCallback mockWriteCallback() {
-            return mock(BookkeeperInternalCallbacks.WriteCallback.class);
-        }
-    }*/
-
     @RunWith(Parameterized.class)
     public static class BookieImplExplicitLacIntegrationTest {
 
@@ -686,78 +612,6 @@ public class BookieImplTests {
             return mock(BookkeeperInternalCallbacks.WriteCallback.class);
         }
     }
-
-    /*@RunWith(Parameterized.class)
-    public static class BookieImplReadLastAddConfirmedTest {
-
-        private final long ledgerId;
-        private final boolean expectException;
-        private final long expectedLastAddConfirmed;
-        private TestBookieImpl bookie;
-
-        private final TmpDirs tmpDirs=new TmpDirs();
-
-        public BookieImplReadLastAddConfirmedTest(long ledgerId, boolean expectException, long expectedLastAddConfirmed) {
-            this.ledgerId = ledgerId;
-            this.expectException = expectException;
-            this.expectedLastAddConfirmed = expectedLastAddConfirmed;
-        }
-
-        @Parameterized.Parameters
-        public static Collection<Object[]> data() {
-            return Arrays.asList(new Object[][]{
-                    {1L, false, 10L},
-                    {0L, true, -1L},
-                    {-1L, true, -1L},
-                    {2L, true, -1L},
-            });
-        }
-
-        @Before
-        public void setup() throws Exception {
-            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-
-            bookie = new TestBookieImpl(conf);
-            bookie.start();
-
-            if (ledgerId > 0 && !expectException) {
-                ByteBuf entryToAdd = EntryBuilder.createValidEntry();
-                for (long i = 0; i <= expectedLastAddConfirmed; i++) {
-                    bookie.addEntry(
-                            EntryBuilder.createValidEntry(),
-                            false,
-                            (rc, ledgerId, entryId, addr, ctx) -> {},
-                            null,
-                            "ValidMasterKey".getBytes(StandardCharsets.UTF_8));
-                }
-            }
-        }
-
-        @Test
-        public void testReadLastAddConfirmed() {
-            try {
-                long lastAddConfirmed = bookie.readLastAddConfirmed(ledgerId);
-                if (expectException) {
-                    fail("Expected an exception, but none was thrown.");
-                }
-                assertEquals("LastAddConfirmed value should match the expected value.",
-                        expectedLastAddConfirmed, lastAddConfirmed);
-            } catch (Exception e) {
-                if (!expectException) {
-                    fail("Unexpected exception thrown: " + e.getClass().getSimpleName() + " - " + e.getMessage());
-                }
-            }
-        }
-
-        @After
-        public void teardown() {
-            try {
-                bookie.shutdown();
-            } catch (Exception e) {
-                fail("Failed to shutdown BookieImpl: " + e.getMessage());
-            }
-        }
-    }*/
 
 
 
@@ -920,6 +774,324 @@ public class BookieImplTests {
                 }
             };
         }
+    }
+
+    public static class DeleteTemp {
+
+        /**
+         * Elimina i file e le directory specificati nei parametri.
+         *
+         * @param journalDirs Array di directory journal.
+         * @param indexDirs Array di directory index.
+         * @param ledgerDirs Array di directory ledger.
+         */
+        public static void deleteFiles(File[] journalDirs, File[] indexDirs, File[] ledgerDirs) {
+            if (journalDirs != null) {
+                deleteFilesRecursive(journalDirs);
+            }
+            if (indexDirs != null) {
+                deleteFilesRecursive(indexDirs);
+            }
+            if (ledgerDirs != null) {
+                deleteFilesRecursive(ledgerDirs);
+            }
+        }
+
+        /**
+         * Elimina ricorsivamente i file e le directory specificate.
+         *
+         * @param dirs Array di directory da eliminare.
+         */
+        private static void deleteFilesRecursive(File[] dirs) {
+            for (File dir : dirs) {
+                if (dir != null) {
+                    deleteFileOrDirectory(dir);
+                }
+            }
+        }
+
+        /**
+         * Elimina ricorsivamente un file o directory.
+         *
+         * @param fileOrDir File o directory da eliminare.
+         */
+        private static void deleteFileOrDirectory(File fileOrDir) {
+            if (fileOrDir.isDirectory()) {
+                File[] children = fileOrDir.listFiles();
+                if (children != null) {
+                    for (File child : children) {
+                        deleteFileOrDirectory(child);
+                    }
+                }
+            }
+            if (!fileOrDir.delete()) {
+                System.err.println("Unable to delete: " + fileOrDir.getAbsolutePath());
+            }
+        }
+    }
+
+    public enum Enum {
+        EXISTENT_WITH_FILE {
+            @Override
+            public File[] getDirectories() {
+                return createTemporaryDirectoriesWithFiles(3);
+            }
+        },
+        EXISTENT_DIR_WITH_SUBDIR_AND_FILE {
+            @Override
+            public File[] getDirectories() {
+                return createDirectoriesWithSubdirsAndFiles(3);
+            }
+        },
+        EXISTENT_DIR_WITH_NON_REMOVABLE_SUBDIR {
+            @Override
+            public File[] getDirectories() {
+                return createDirectoriesWithNonRemovableSubdirs(3);
+            }
+        },
+        EXISTENT_DIR_WITH_NON_REMOVABLE_FILE {
+            @Override
+            public File[] getDirectories() {
+                return createDirectoriesWithNonRemovableFiles(3);
+            }
+        },
+        EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR {
+            @Override
+            public File[] getDirectories() {
+                return createDirectoriesWithNonRemovableEmptySubdirs(3);
+            }
+        },
+        NON_EXISTENT_DIRS {
+            @Override
+            public File[] getDirectories() {
+                return createNonExistentDirectories(3);
+            }
+        },
+        EMPTY_ARRAY {
+            @Override
+            public File[] getDirectories() {
+                return new File[0];
+            }
+        },
+        NULL {
+            @Override
+            public File[] getDirectories() {
+                return null;
+            }
+        };
+
+        public abstract File[] getDirectories();
+    }
+
+    private static File[] createTemporaryDirectoriesWithFiles(int count) {
+        File[] dirs = new File[count];
+        for (int i = 0; i < count; i++) {
+            try {
+                File dir = Files.createTempDirectory("tempDirWithFile" + i).toFile();
+                new File(dir, "file.txt").createNewFile();
+                dirs[i] = dir;
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return dirs;
+    }
+
+    private static File[] createDirectoriesWithSubdirsAndFiles(int count) {
+        File[] dirs = new File[count];
+        for (int i = 0; i < count; i++) {
+            try {
+                File dir = Files.createTempDirectory("tempDirWithSubdir" + i).toFile();
+                File subDir = new File(dir, "subdir");
+                subDir.mkdir();
+                new File(subDir, "file.txt").createNewFile();
+                dirs[i] = dir;
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return dirs;
+    }
+
+    private static File[] createDirectoriesWithNonRemovableSubdirs(int count) {
+        File[] dirs = new File[count];
+        for (int i = 0; i < count; i++) {
+            try {
+                File dir = Files.createTempDirectory("tempDirWithNonRemovableSubdir" + i).toFile();
+                File subDir = new File(dir, "subdir");
+                subDir.mkdir();
+                if (!subDir.setWritable(false)) {
+                    throw new RuntimeException("Failed to make directory non-removable");
+                }
+                dirs[i] = dir;
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return dirs;
+    }
+
+    private static File[] createNonExistentDirectories(int count) {
+        File[] dirs = new File[count];
+        for (int i = 0; i < count; i++) {
+            dirs[i] = new File("nonexistentDir" + i);
+        }
+        return dirs;
+    }
+
+    private static File[] createDirectoriesWithNonRemovableFiles(int count) {
+        File[] dirs = new File[count];
+        for (int i = 0; i < count; i++) {
+            try {
+                File dir = Files.createTempDirectory("tempDirWithNonRemovableFile" + i).toFile();
+                File nonRemovableFile = new File(dir, "nonRemovableFile.txt");
+                if (!nonRemovableFile.createNewFile()) {
+                    throw new RuntimeException("Failed to create file: " + nonRemovableFile.getAbsolutePath());
+                }
+                if (!nonRemovableFile.setWritable(false, false) || !nonRemovableFile.setReadable(false, false)) {
+                    throw new RuntimeException("Failed to make file non-removable: " + nonRemovableFile.getAbsolutePath());
+                }
+                if (!dir.setWritable(false, false)) {
+                    throw new RuntimeException("Failed to make directory non-writable: " + dir.getAbsolutePath());
+                }
+
+                dirs[i] = dir;
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to create directory with non-removable file", e);
+            }
+        }
+        return dirs;
+    }
+
+    private static File[] createDirectoriesWithNonRemovableEmptySubdirs(int count) {
+        File[] dirs = new File[count];
+        for (int i = 0; i < count; i++) {
+            try {
+                File dir = Files.createTempDirectory("tempDirWithNonRemovableEmptySubdir" + i).toFile();
+                File subDir = new File(dir, "nonRemovableSubdir");
+                if (!subDir.mkdir()) {
+                    throw new RuntimeException("Failed to create subdirectory: " + subDir.getAbsolutePath());
+                }
+
+                if (!subDir.setWritable(false, false) || !subDir.setExecutable(false, false) || !subDir.setReadable(true, false)) {
+                    throw new RuntimeException("Failed to make subdirectory non-removable: " + subDir.getAbsolutePath());
+                }
+
+                if (!dir.setWritable(false, false)) {
+                    throw new RuntimeException("Failed to make parent directory non-writable: " + dir.getAbsolutePath());
+                }
+
+                dirs[i] = dir;
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to create directory with non-removable empty subdirectory", e);
+            }
+        }
+        return dirs;
+    }
+
+
+
+    @RunWith(Parameterized.class)
+    public static class OptimizedFormatTest {
+
+        private final boolean isInteractive;
+        private final boolean force;
+        private final boolean expectedResult;
+        private final Enum journalDirs;
+
+        private final Enum ledgerDirs;
+
+        private final Enum indexDirs;
+
+        private final Enum gcEntryLogMetadataCachePath;
+        private final String input;
+        private final boolean expException;
+
+        private ServerConfiguration conf;
+        private static InputStream originalSystemIn;
+
+        public OptimizedFormatTest(Enum journalDirs, Enum ledgerDirs, Enum indexDirs, Enum gcEntryLogMetadataCachePath,
+                                   boolean isInteractive, boolean force, String input,
+                                   boolean expectedResult, boolean expException) {
+            this.isInteractive = isInteractive;
+            this.force = force;
+            this.expectedResult = expectedResult;
+            this.journalDirs = journalDirs;
+            this.ledgerDirs = ledgerDirs;
+            this.indexDirs = indexDirs;
+            this.gcEntryLogMetadataCachePath = gcEntryLogMetadataCachePath;
+            this.input = input;
+            this.expException = expException;
+        }
+
+        @Parameterized.Parameters
+        public static Collection<Object[]> testCasesArgument() {
+            return Arrays.asList(new Object[][]{
+
+                    {EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, true, false, "Y", true, false},
+                    {EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, true, false, "INVALID", false, true},
+                    {EXISTENT_DIR_WITH_SUBDIR_AND_FILE, EXISTENT_WITH_FILE, EMPTY_ARRAY, NON_EXISTENT_DIRS, true, false, "N", false, false},
+                    {EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, false, true, "Y", false, false},
+                    {EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR, NON_EXISTENT_DIRS, EXISTENT_WITH_FILE, EMPTY_ARRAY, false, true, "Y", false, false},
+                    {EMPTY_ARRAY, EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR, EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR, EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR, true, false, "Y", false, false},
+                    {EMPTY_ARRAY, EMPTY_ARRAY, EMPTY_ARRAY, NULL, true, true, "Y", true, false},
+                    {NULL, NULL, NULL, EMPTY_ARRAY, false, false, "Y", false, true},
+            });
+        }
+
+        @Before
+        public void setup() throws Exception {
+            conf = mock(ServerConfiguration.class);
+
+            File[] journalDirsArray = journalDirs.getDirectories();
+            File[] ledgerDirsArray = ledgerDirs.getDirectories();
+            File[] indexDirsArray = indexDirs.getDirectories();
+
+            when(conf.getJournalDirs()).thenReturn(journalDirsArray);
+            when(conf.getLedgerDirs()).thenReturn(ledgerDirsArray);
+            when(conf.getIndexDirs()).thenReturn(indexDirsArray);
+        }
+
+        @After
+        public void cleanup() {
+            DeleteTemp.deleteFiles(conf.getJournalDirs(), conf.getIndexDirs(), conf.getLedgerDirs());
+            System.setIn(originalSystemIn);
+        }
+
+        @Test
+        public void formatTest() {
+            try {
+                originalSystemIn = System.in;
+
+                // Configura l'input dell'utente in base al parametro `input`
+                switch (this.input) {
+                    case "Y":
+                        System.setIn(new ByteArrayInputStream("Y\nY\nY\n".getBytes()));
+                        break;
+                    case "N":
+                        System.setIn(new ByteArrayInputStream("N\n".getBytes()));
+                        break;
+                    case "INVALID":
+                        InputStream failingStream = mock(InputStream.class);
+                        when(failingStream.read()).thenThrow(new IOException("Simulated IOException"));
+                        System.setIn(failingStream);
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Invalid input case: " + this.input);
+                }
+
+                boolean result = BookieImpl.format(conf, isInteractive, force);
+                assertEquals(expectedResult, result);
+                //assertFalse(this.expException);
+            } catch (Exception e) {
+                if (!expException) {
+                    fail("Unexpected exception thrown: " + e.getMessage());
+                }
+                e.printStackTrace();
+            }
+        }
+
+
     }
 
 
