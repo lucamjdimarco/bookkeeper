@@ -1,23 +1,17 @@
 package org.apache.bookkeeper.bookie;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
-import io.netty.buffer.UnpooledByteBufAllocator;
 import org.apache.bookkeeper.common.util.Watcher;
 import org.apache.bookkeeper.conf.ServerConfiguration;
 import org.apache.bookkeeper.conf.TestBKConfiguration;
-import org.apache.bookkeeper.discover.BookieServiceInfo;
-import org.apache.bookkeeper.discover.RegistrationManager;
+import org.apache.bookkeeper.helper.DeleteTemp;
 import org.apache.bookkeeper.helper.EntryBuilder;
+import org.apache.bookkeeper.helper.EnumForDir;
 import org.apache.bookkeeper.net.BookieId;
 import org.apache.bookkeeper.net.BookieSocketAddress;
 import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks;
-import org.apache.bookkeeper.stats.NullStatsLogger;
-import org.apache.bookkeeper.stats.StatsLogger;
 import org.apache.bookkeeper.test.TmpDirs;
-import org.apache.bookkeeper.util.DiskChecker;
-import org.awaitility.Awaitility;
 import org.junit.*;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
@@ -26,7 +20,6 @@ import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.security.auth.callback.Callback;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -35,19 +28,13 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Comparator;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Supplier;
-import java.util.concurrent.CompletableFuture;
 
 
-import static org.apache.bookkeeper.bookie.BookieImplTests.Enum.*;
+import static org.apache.bookkeeper.helper.EnumForDir.*;
 import static org.junit.Assert.*;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 @RunWith(value = Enclosed.class)
@@ -88,8 +75,7 @@ public class BookieImplTests {
                     {false, false, true, true, null},
                     // Test Case 3: Directory non esistente, vecchio layout presente, mkdirs() ha successo, mi aspetto eccezione
                     {false, true, true, true, IOException.class},
-                    // Test Case 4: Directory esistente, ma non accessibile, nessun vecchio layout, mi aspetto eccezione
-                    //{true, false, true, true, IOException.class}
+                    {false, false, false, true, IOException.class}
             });
         }
 
@@ -106,16 +92,18 @@ public class BookieImplTests {
                     testDir = Files.createFile(parentDir.resolve("testDir"));
                 }
             } else {
+                File mockDir = Mockito.mock(File.class);
                 testDir = parentDir.resolve("testDir");
                 if (!mkdirsSuccess) {
                     // simulo il fallimento di mkdirs()
-                    File dirFile = Mockito.spy(testDir.toFile());
-                    Mockito.doReturn(false).when(dirFile).mkdirs();
-                    testDir = dirFile.toPath();
 
-                    if (Files.exists(testDir)) {
-                        fail("La directory non dovrebbe esistere in questo caso.");
-                    }
+                    Mockito.when(mockDir.exists()).thenReturn(false);
+                    Mockito.when(mockDir.mkdirs()).thenReturn(false);
+                    Mockito.when(mockDir.getParentFile()).thenReturn(parentDir.toFile());
+                    Mockito.when(mockDir.toPath()).thenReturn(testDir);
+
+
+                    testDir = mockDir.toPath();
                 }
             }
 
@@ -776,241 +764,26 @@ public class BookieImplTests {
         }
     }
 
-    public static class DeleteTemp {
-
-        /**
-         * Elimina i file e le directory specificati nei parametri.
-         *
-         * @param journalDirs Array di directory journal.
-         * @param indexDirs Array di directory index.
-         * @param ledgerDirs Array di directory ledger.
-         */
-        public static void deleteFiles(File[] journalDirs, File[] indexDirs, File[] ledgerDirs) {
-            if (journalDirs != null) {
-                deleteFilesRecursive(journalDirs);
-            }
-            if (indexDirs != null) {
-                deleteFilesRecursive(indexDirs);
-            }
-            if (ledgerDirs != null) {
-                deleteFilesRecursive(ledgerDirs);
-            }
-        }
-
-        /**
-         * Elimina ricorsivamente i file e le directory specificate.
-         *
-         * @param dirs Array di directory da eliminare.
-         */
-        private static void deleteFilesRecursive(File[] dirs) {
-            for (File dir : dirs) {
-                if (dir != null) {
-                    deleteFileOrDirectory(dir);
-                }
-            }
-        }
-
-        /**
-         * Elimina ricorsivamente un file o directory.
-         *
-         * @param fileOrDir File o directory da eliminare.
-         */
-        private static void deleteFileOrDirectory(File fileOrDir) {
-            if (fileOrDir.isDirectory()) {
-                File[] children = fileOrDir.listFiles();
-                if (children != null) {
-                    for (File child : children) {
-                        deleteFileOrDirectory(child);
-                    }
-                }
-            }
-            if (!fileOrDir.delete()) {
-                System.err.println("Unable to delete: " + fileOrDir.getAbsolutePath());
-            }
-        }
-    }
-
-    public enum Enum {
-        EXISTENT_WITH_FILE {
-            @Override
-            public File[] getDirectories() {
-                return createTemporaryDirectoriesWithFiles(3);
-            }
-        },
-        EXISTENT_DIR_WITH_SUBDIR_AND_FILE {
-            @Override
-            public File[] getDirectories() {
-                return createDirectoriesWithSubdirsAndFiles(3);
-            }
-        },
-        EXISTENT_DIR_WITH_NON_REMOVABLE_SUBDIR {
-            @Override
-            public File[] getDirectories() {
-                return createDirectoriesWithNonRemovableSubdirs(3);
-            }
-        },
-        EXISTENT_DIR_WITH_NON_REMOVABLE_FILE {
-            @Override
-            public File[] getDirectories() {
-                return createDirectoriesWithNonRemovableFiles(3);
-            }
-        },
-        EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR {
-            @Override
-            public File[] getDirectories() {
-                return createDirectoriesWithNonRemovableEmptySubdirs(3);
-            }
-        },
-        NON_EXISTENT_DIRS {
-            @Override
-            public File[] getDirectories() {
-                return createNonExistentDirectories(3);
-            }
-        },
-        EMPTY_ARRAY {
-            @Override
-            public File[] getDirectories() {
-                return new File[0];
-            }
-        },
-        NULL {
-            @Override
-            public File[] getDirectories() {
-                return null;
-            }
-        };
-
-        public abstract File[] getDirectories();
-    }
-
-    private static File[] createTemporaryDirectoriesWithFiles(int count) {
-        File[] dirs = new File[count];
-        for (int i = 0; i < count; i++) {
-            try {
-                File dir = Files.createTempDirectory("tempDirWithFile" + i).toFile();
-                new File(dir, "file.txt").createNewFile();
-                dirs[i] = dir;
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        return dirs;
-    }
-
-    private static File[] createDirectoriesWithSubdirsAndFiles(int count) {
-        File[] dirs = new File[count];
-        for (int i = 0; i < count; i++) {
-            try {
-                File dir = Files.createTempDirectory("tempDirWithSubdir" + i).toFile();
-                File subDir = new File(dir, "subdir");
-                subDir.mkdir();
-                new File(subDir, "file.txt").createNewFile();
-                dirs[i] = dir;
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        return dirs;
-    }
-
-    private static File[] createDirectoriesWithNonRemovableSubdirs(int count) {
-        File[] dirs = new File[count];
-        for (int i = 0; i < count; i++) {
-            try {
-                File dir = Files.createTempDirectory("tempDirWithNonRemovableSubdir" + i).toFile();
-                File subDir = new File(dir, "subdir");
-                subDir.mkdir();
-                if (!subDir.setWritable(false)) {
-                    throw new RuntimeException("Failed to make directory non-removable");
-                }
-                dirs[i] = dir;
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        return dirs;
-    }
-
-    private static File[] createNonExistentDirectories(int count) {
-        File[] dirs = new File[count];
-        for (int i = 0; i < count; i++) {
-            dirs[i] = new File("nonexistentDir" + i);
-        }
-        return dirs;
-    }
-
-    private static File[] createDirectoriesWithNonRemovableFiles(int count) {
-        File[] dirs = new File[count];
-        for (int i = 0; i < count; i++) {
-            try {
-                File dir = Files.createTempDirectory("tempDirWithNonRemovableFile" + i).toFile();
-                File nonRemovableFile = new File(dir, "nonRemovableFile.txt");
-                if (!nonRemovableFile.createNewFile()) {
-                    throw new RuntimeException("Failed to create file: " + nonRemovableFile.getAbsolutePath());
-                }
-                if (!nonRemovableFile.setWritable(false, false) || !nonRemovableFile.setReadable(false, false)) {
-                    throw new RuntimeException("Failed to make file non-removable: " + nonRemovableFile.getAbsolutePath());
-                }
-                if (!dir.setWritable(false, false)) {
-                    throw new RuntimeException("Failed to make directory non-writable: " + dir.getAbsolutePath());
-                }
-
-                dirs[i] = dir;
-            } catch (IOException e) {
-                throw new RuntimeException("Failed to create directory with non-removable file", e);
-            }
-        }
-        return dirs;
-    }
-
-    private static File[] createDirectoriesWithNonRemovableEmptySubdirs(int count) {
-        File[] dirs = new File[count];
-        for (int i = 0; i < count; i++) {
-            try {
-                File dir = Files.createTempDirectory("tempDirWithNonRemovableEmptySubdir" + i).toFile();
-                File subDir = new File(dir, "nonRemovableSubdir");
-                if (!subDir.mkdir()) {
-                    throw new RuntimeException("Failed to create subdirectory: " + subDir.getAbsolutePath());
-                }
-
-                if (!subDir.setWritable(false, false) || !subDir.setExecutable(false, false) || !subDir.setReadable(true, false)) {
-                    throw new RuntimeException("Failed to make subdirectory non-removable: " + subDir.getAbsolutePath());
-                }
-
-                if (!dir.setWritable(false, false)) {
-                    throw new RuntimeException("Failed to make parent directory non-writable: " + dir.getAbsolutePath());
-                }
-
-                dirs[i] = dir;
-            } catch (IOException e) {
-                throw new RuntimeException("Failed to create directory with non-removable empty subdirectory", e);
-            }
-        }
-        return dirs;
-    }
-
-
-
     @RunWith(Parameterized.class)
     public static class OptimizedFormatTest {
 
         private final boolean isInteractive;
         private final boolean force;
         private final boolean expectedResult;
-        private final Enum journalDirs;
+        private final EnumForDir journalDirs;
 
-        private final Enum ledgerDirs;
+        private final EnumForDir ledgerDirs;
 
-        private final Enum indexDirs;
+        private final EnumForDir indexDirs;
 
-        private final Enum gcEntryLogMetadataCachePath;
+        private final EnumForDir gcEntryLogMetadataCachePath;
         private final String input;
         private final boolean expException;
 
         private ServerConfiguration conf;
         private static InputStream originalSystemIn;
 
-        public OptimizedFormatTest(Enum journalDirs, Enum ledgerDirs, Enum indexDirs, Enum gcEntryLogMetadataCachePath,
+        public OptimizedFormatTest(EnumForDir journalDirs, EnumForDir ledgerDirs, EnumForDir indexDirs, EnumForDir gcEntryLogMetadataCachePath,
                                    boolean isInteractive, boolean force, String input,
                                    boolean expectedResult, boolean expException) {
             this.isInteractive = isInteractive;
@@ -1046,10 +819,12 @@ public class BookieImplTests {
             File[] journalDirsArray = journalDirs.getDirectories();
             File[] ledgerDirsArray = ledgerDirs.getDirectories();
             File[] indexDirsArray = indexDirs.getDirectories();
+            String gcPath = gcEntryLogMetadataCachePath.getGcEntryLogMetadataCachePath();
 
             when(conf.getJournalDirs()).thenReturn(journalDirsArray);
             when(conf.getLedgerDirs()).thenReturn(ledgerDirsArray);
             when(conf.getIndexDirs()).thenReturn(indexDirsArray);
+            when(conf.getGcEntryLogMetadataCachePath()).thenReturn(gcPath);
         }
 
         @After
@@ -1063,7 +838,6 @@ public class BookieImplTests {
             try {
                 originalSystemIn = System.in;
 
-                // Configura l'input dell'utente in base al parametro `input`
                 switch (this.input) {
                     case "Y":
                         System.setIn(new ByteArrayInputStream("Y\nY\nY\n".getBytes()));
@@ -1096,21 +870,5 @@ public class BookieImplTests {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
 
 }
