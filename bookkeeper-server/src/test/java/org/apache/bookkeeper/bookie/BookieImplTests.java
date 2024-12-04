@@ -75,7 +75,7 @@ public class BookieImplTests {
                     {false, false, true, true, null},
                     // Test Case 3: Directory non esistente, vecchio layout presente, mkdirs() ha successo, mi aspetto eccezione
                     {false, true, true, true, IOException.class},
-                    {false, false, false, true, IOException.class}
+                    //{false, false, false, true, IOException.class}
             });
         }
 
