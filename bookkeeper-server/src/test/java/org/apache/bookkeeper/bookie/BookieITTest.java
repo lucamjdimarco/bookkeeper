@@ -35,6 +35,27 @@ public class BookieITTest extends BookKeeperClusterTestCase {
         lh.close();
     }
 
+    @Test
+    public void testWriteFailureWithoutQuorum() throws Exception {
+
+        LedgerHandle lh = bkc.createLedger(3, 3, 2, BookKeeper.DigestType.CRC32, "password".getBytes(StandardCharsets.UTF_8));
+
+        String entry = "entryThatFailsToWrite";
+
+        servers.get(0).getServer().shutdown();
+        servers.get(1).getServer().shutdown();
+
+        try {
+
+            lh.addEntry(entry.getBytes(StandardCharsets.UTF_8));
+            fail("L'operazione di scrittura non dovrebbe riuscire senza quorum");
+        } catch (BKException.BKNotEnoughBookiesException e) {
+            assertTrue("L'operazione di scrittura fallisce come previsto", true);
+        } finally {
+            lh.close();
+        }
+    }
+
 
 
 
