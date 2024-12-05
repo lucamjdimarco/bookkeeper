@@ -54,6 +54,7 @@ public class BookieImplTests {
         private TmpDirs tmpDirs;
         private Path testDir;
         private Path parentDir;
+        private File mockDir;
 
         public TestCheckDirectoryStructure(boolean exists, boolean oldLayout, boolean mkdirsSuccess, boolean isDirectory,
                                            Class<? extends Exception> expectedException) {
@@ -75,14 +76,15 @@ public class BookieImplTests {
                     {false, false, true, true, null},
                     // Test Case 3: Directory non esistente, vecchio layout presente, mkdirs() ha successo, mi aspetto eccezione
                     {false, true, true, true, IOException.class},
-                    //{false, false, false, true, IOException.class}
+                    //aggiunta questa casistica per aumentare la copertura di BADUA --> quando mkdirs fallisce (var dir)
+                    //non ancora lo vede
+                    {false, false, false, true, IOException.class}
             });
         }
 
         @Before
         public void setUp() throws Exception {
             tmpDirs = new TmpDirs();
-
             parentDir = tmpDirs.createNew("parentDir", null).toPath();
 
             if (exists) {
@@ -92,23 +94,21 @@ public class BookieImplTests {
                     testDir = Files.createFile(parentDir.resolve("testDir"));
                 }
             } else {
-                File mockDir = Mockito.mock(File.class);
-                testDir = parentDir.resolve("testDir");
-                if (!mkdirsSuccess) {
-                    // simulo il fallimento di mkdirs()
+                mockDir = Mockito.mock(File.class);
+                Mockito.when(mockDir.getParentFile()).thenReturn(parentDir.toFile());
 
+                if (!mkdirsSuccess) {
                     Mockito.when(mockDir.exists()).thenReturn(false);
                     Mockito.when(mockDir.mkdirs()).thenReturn(false);
-                    Mockito.when(mockDir.getParentFile()).thenReturn(parentDir.toFile());
-                    Mockito.when(mockDir.toPath()).thenReturn(testDir);
-
-
-                    testDir = mockDir.toPath();
+                } else {
+                    Mockito.when(mockDir.exists()).thenReturn(false);
+                    Mockito.when(mockDir.mkdirs()).thenReturn(true);
                 }
+
+                Mockito.when(mockDir.toPath()).thenReturn(parentDir.resolve("testDir"));
             }
 
             if (oldLayout) {
-                // Creo un file di vecchio layout nella directory padre
                 Files.createFile(parentDir.resolve("file.txn"));
             }
         }
@@ -116,15 +116,10 @@ public class BookieImplTests {
         @Test
         public void testCheckDirectoryStructure() {
             try {
-                if (testDir == null) {
-                    if (expectedException == NullPointerException.class) {
-                        throw new NullPointerException("testDir is null as expected");
-                    } else {
-                        fail("testDir is null, but NullPointerException was not expected");
-                    }
-                }
+                File dirToTest = (exists) ? testDir.toFile() : mockDir;
 
-                BookieImpl.checkDirectoryStructure(testDir.toFile());
+                BookieImpl.checkDirectoryStructure(dirToTest);
+
                 if (expectedException != null) {
                     fail("Expected exception " + expectedException.getSimpleName() + " but none was thrown.");
                 }
@@ -866,7 +861,11 @@ public class BookieImplTests {
         }
 
 
+
+
     }
+
+
 
 
 
