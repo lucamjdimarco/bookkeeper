@@ -70,14 +70,13 @@ public class BookieImplTests {
             return Arrays.asList(new Object[][]{
                     // exists, oldLayout, mkdirsSuccess, isDirectory, expectedException
 
-                    // Test Case 1: Directory esistente, nessun vecchio layout, dovrebbe passare
+                    // Test Case 1: Directory esistente, nessun vecchio layout, passa
                     {true, false, true, true, null},
-                    // Test Case 2: Directory non esistente, no vecchio layout, mkdirs() ha successo, dovrebbe passare
+                    // Test Case 2: Directory non esistente, no vecchio layout, mkdirs() ha successo, passa
                     {false, false, true, true, null},
-                    // Test Case 3: Directory non esistente, vecchio layout presente, mkdirs() ha successo, mi aspetto eccezione
+                    // Test Case 3: Directory non esistente, vecchio layout presente, mkdirs() ha successo, eccezione
                     {false, true, true, true, IOException.class},
                     //aggiunta questa casistica per aumentare la copertura di BADUA --> quando mkdirs fallisce (var dir)
-                    //non ancora lo vede
                     {false, false, false, true, IOException.class}
             });
         }
@@ -148,30 +147,51 @@ public class BookieImplTests {
     public static class BookieImplGetBookieIdTest {
         private final String customBookieId;
         private final boolean expectException;
+        private final boolean useMock;
 
-        public BookieImplGetBookieIdTest(String customBookieId, boolean expectException) {
+        public BookieImplGetBookieIdTest(String customBookieId, boolean expectException, boolean useMock) {
             this.customBookieId = customBookieId;
             this.expectException = expectException;
+            this.useMock = useMock;
         }
 
         @Parameterized.Parameters
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
                     // Valid configuration
-                    {"bookie-01.example.com:9000", false},
+                    {"bookie-01.example.com:9000", false, false},
 
                     // Invalid configurations
-                    {"127.0.0.1:3181!", true},                   // Invalid customBookieId
-                    {"", true},                                   // Empty customBookieId
+                    {"127.0.0.1:3181!", true, false},                   // Invalid customBookieId
+                    {"", true, false},                                   // Empty customBookieId
+                    // aggiunta per aumentare coverage per BADUA --> continua a non vederli
+                    {"readonly", true, true},
+                    {null, false, false},                                 // Null customBookieId
             });
         }
 
         @Test
         public void testGetBookieId() {
-            ServerConfiguration conf = null;
             try {
-                conf = TestBKConfiguration.newServerConfiguration();
+                /*ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
                 if (customBookieId != null) conf.setBookieId(customBookieId);
+
+                BookieId bookieId = BookieImpl.getBookieId(conf);
+
+                if (expectException) {
+                    fail("Expected an exception, but none was thrown.");
+                }
+                assertNotNull("BookieId should not be null for valid configuration.", bookieId);*/
+
+                //uso del mock per conf invalida ma BADUA non lo vede
+                ServerConfiguration conf;
+                if (useMock) {
+                    conf = mock(ServerConfiguration.class);
+                    when(conf.getBookieId()).thenReturn(customBookieId);
+                } else {
+                    conf = TestBKConfiguration.newServerConfiguration();
+                    if (customBookieId != null) conf.setBookieId(customBookieId);
+                }
 
                 BookieId bookieId = BookieImpl.getBookieId(conf);
 
@@ -326,6 +346,9 @@ public class BookieImplTests {
                     {null, createMockLedgerStorage(false), true},                  // conf null
                     {createInvalidConfig(), createMockLedgerStorage(false), true}, // conf invalida con ledgerStorage non inizializzato
                     {createValidConfig(), createMockLedgerStorage(true), true},    // conf valida con ledgerStorage già inizializzato
+
+                    //
+                    {createValidConfig(), null, false},
             });
         }
 
