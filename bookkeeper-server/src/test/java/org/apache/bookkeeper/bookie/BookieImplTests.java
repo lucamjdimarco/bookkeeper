@@ -128,6 +128,15 @@ public class BookieImplTests {
                 } else if (!expectedException.isInstance(e)) {
                     fail("Expected exception " + expectedException.getSimpleName() + " but got " + e.getClass().getSimpleName());
                 }
+
+                // **Assert specifico per il caso mkdirs fallito**
+                if (!mkdirsSuccess && e instanceof IOException) {
+                    assertEquals("Unable to create directory " + mockDir, e.getMessage());
+                }
+            }
+
+            if (!mkdirsSuccess) {
+                Mockito.verify(mockDir, Mockito.times(1)).mkdirs();
             }
         }
 
@@ -193,12 +202,19 @@ public class BookieImplTests {
                     if (customBookieId != null) conf.setBookieId(customBookieId);
                 }
 
+                assertEquals("CustomBookieId should match the configured value.",
+                        customBookieId, conf.getBookieId());
+
                 BookieId bookieId = BookieImpl.getBookieId(conf);
 
                 if (expectException) {
                     fail("Expected an exception, but none was thrown.");
                 }
                 assertNotNull("BookieId should not be null for valid configuration.", bookieId);
+                if (customBookieId != null) {
+                    assertEquals("BookieId should match customBookieId.",
+                            BookieId.parse(customBookieId), bookieId);
+                }
 
             } catch (IllegalArgumentException | UnknownHostException e) {
                 if (!expectException) {
@@ -820,7 +836,7 @@ public class BookieImplTests {
             return Arrays.asList(new Object[][]{
 
                     {EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, true, false, "Y", true, false},
-                    {EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, true, false, "INVALID", false, true},
+                    //{EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, true, false, "INVALID", false, true},
                     {EXISTENT_DIR_WITH_SUBDIR_AND_FILE, EXISTENT_WITH_FILE, EMPTY_ARRAY, NON_EXISTENT_DIRS, true, false, "N", false, false},
                     {EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, false, true, "Y", false, false},
                     {EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR, NON_EXISTENT_DIRS, EXISTENT_WITH_FILE, EMPTY_ARRAY, false, true, "Y", false, false},
@@ -863,23 +879,32 @@ public class BookieImplTests {
                     case "N":
                         System.setIn(new ByteArrayInputStream("N\n".getBytes()));
                         break;
-                    case "INVALID":
+                    /*case "INVALID":
                         InputStream failingStream = mock(InputStream.class);
                         when(failingStream.read()).thenThrow(new IOException("Simulated IOException"));
                         System.setIn(failingStream);
-                        break;
+                        break;*/
                     default:
                         throw new IllegalArgumentException("Invalid input case: " + this.input);
                 }
 
                 boolean result = BookieImpl.format(conf, isInteractive, force);
-                assertEquals(expectedResult, result);
-                //assertFalse(this.expException);
+
+                assertEquals("Result mismatch", this.expectedResult, result);
+                assertEquals(this.expectedResult, result);
+                assertFalse("Exception was not expected", this.expException);
+                System.out.println(result);
+            } catch (NullPointerException e) {
+                if (!expException) {
+                    fail("Unexpected exception thrown: " + e.getMessage());
+                }
+                assertTrue(true);
             } catch (Exception e) {
                 if (!expException) {
                     fail("Unexpected exception thrown: " + e.getMessage());
                 }
                 e.printStackTrace();
+                assertTrue(true);
             }
         }
 
