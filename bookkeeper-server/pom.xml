@@ -265,6 +265,31 @@
         </executions>
       </plugin>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>2.10</version>
+        <executions>
+          <execution>
+            <id>extract-zip</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>unpack</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>br.usp.each.saeg</groupId>
+                  <artifactId>ba-dua</artifactId>
+                  <version>0.6.0</version>
+                  <type>zip</type>
+                  <outputDirectory>${project.build.directory}</outputDirectory>
+                </artifactItem>
+              </artifactItems>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
         <groupId>org.apache.rat</groupId>
         <artifactId>apache-rat-plugin</artifactId>
         <configuration>
@@ -298,7 +323,7 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${maven-surefire-plugin.version}</version>
         <!-- ######### COMMENTATO PER BADUA ######### -->
-        <!--<configuration>
+        <configuration>
           <trimStackTrace>false</trimStackTrace>
           <properties>
             <property>
@@ -306,7 +331,7 @@
               <value>org.apache.bookkeeper.common.testing.util.TimedOutTestsListener</value>
             </property>
           </properties>
-        </configuration>-->
+        </configuration>
         <!-- ######### AGGIUNTA PER BADUA ######### -->
       </plugin>
       <plugin>
@@ -394,29 +419,44 @@
     <!-- ######### AGGIUNTA PER BADUA ######### -->
     <profile>
       <id>ba-dua-coverage</id>
-        <activation>
-          <activeByDefault>false</activeByDefault>
-        </activation>
-        <properties>
-          <BADUACLI>./target/lib/ba-dua-cli-0.4.0-all.jar</BADUACLI>
-          <BADUASER>./target/badua.ser</BADUASER>
-          <CLASSES>./target/classes</CLASSES>
-          <BADUAXML>./target/badua.xml</BADUAXML>
-          <argLine>
-            -javaagent:${project.build.directory}/lib/ba-dua-agent-rt-0.4.0-all.jar
-            -Doutput.file=target/badua.ser
-          </argLine>
-        </properties>
-        <build>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <properties>
+        <BADUACLI>./target/lib/ba-dua-cli-0.6.0-all.jar</BADUACLI>
+        <BADUASER>./target/badua.ser</BADUASER>
+        <CLASSES>./target/classes</CLASSES>
+        <BADUAXML>./target/badua.xml</BADUAXML>
+      </properties>
+      <build>
         <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <version>3.0.0-M5</version>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <phase>verify</phase>
+              </execution>
+            </executions>
+            <configuration>
+              <argLine>
+                -javaagent:${project.build.directory}/lib/ba-dua-agent-rt-0.6.0-all.jar
+                -Doutput.file=target/badua.ser
+              </argLine>
+            </configuration>
+          </plugin>
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>exec-maven-plugin</artifactId>
-            <version>1.5.0</version>
+            <version>3.0.0</version>
             <executions>
               <execution>
                 <id>run-baduacli</id>
-                <phase>verify</phase>
+                <phase>test</phase>
                 <goals>
                   <goal>exec</goal>
                 </goals>
@@ -440,7 +480,7 @@
             </executions>
           </plugin>
         </plugins>
-        </build>
+      </build>
     </profile>
     <!-- ######### AGGIUNTA PER BADUA ######### -->
   </profiles>

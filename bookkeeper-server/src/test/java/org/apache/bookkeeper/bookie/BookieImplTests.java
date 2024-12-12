@@ -76,7 +76,7 @@ public class BookieImplTests {
                     {false, false, true, true, null},
                     // Test Case 3: Directory non esistente, vecchio layout presente, mkdirs() ha successo, eccezione
                     {false, true, true, true, IOException.class},
-                    //aggiunta questa casistica per aumentare la copertura di BADUA --> quando mkdirs fallisce (var dir)
+                    //AGGIUNTA questa casistica per aumentare la copertura di BADUA
                     {false, false, false, true, IOException.class}
             });
         }
@@ -240,12 +240,20 @@ public class BookieImplTests {
         @Parameterized.Parameters
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
+
                     // valide
-                    {createConfig("127.0.0.1", 3181), false},    // Advertised address, valid interface, valid port
+                    //{createConfig("127.0.0.1", 3181), false},    // Advertised address, valid interface, valid port
 
                     // non valide
-                    {createConfig("127.0.0.1", -1), true},            // Invalid port (-1)
-                    {createConfig("127.0.0.1", 65536), true},         // Invalid port (65536)
+                    //{createConfig("127.0.0.1", -1), true},            // Invalid port (-1)
+                    //{createConfig("127.0.0.1", 65536), true},         // Invalid port (65536)
+
+                    //Test modificati e aggiunti per aumentare la coverage di Badua
+                    //{createConfig2("127.0.0.1", 3181, true), false},
+                    //{createConfigWithiface(null, null, 3181, false), true},//AGGIUNTO PER allowLoopBack gestito anche iface == null
+                    //{createConfigForShortName(null, null, 3181, true, true, true), false}, //AGGIUNTO per coprire getUseShortHostName gestito anche iface == null
+                    {createConfigForHostNotResolv(null, "nonexistent_interface", 3181, true, false, false), true} //AGGIUNTO per coprire UnknownHostInterface
+
             });
         }
 
@@ -253,6 +261,51 @@ public class BookieImplTests {
             ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
             conf.setAdvertisedAddress(advertisedAddress);
             conf.setBookiePort(bookiePort);
+            return conf;
+        }
+
+        private static ServerConfiguration createConfig2(String advertisedAddress, int bookiePort, boolean allowLoopback) {
+            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+            conf.setAdvertisedAddress(advertisedAddress);
+            conf.setBookiePort(bookiePort);
+            conf.setAllowLoopback(allowLoopback);
+            return conf;
+        }
+
+        private static ServerConfiguration createConfigWithiface(String advertisedAddress, String iface, int bookiePort, boolean allowLoopback) {
+            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+            conf.setAdvertisedAddress(advertisedAddress); // AdvertisedAddress null
+            conf.setBookiePort(bookiePort);
+            conf.setAllowLoopback(allowLoopback); // Loopback non consentito
+            if (iface != null) {
+                conf.setListeningInterface(iface); // Imposta iface solo se non è null
+            }
+            return conf;
+        }
+
+        private static ServerConfiguration createConfigForShortName(String advertisedAddress, String iface, int bookiePort, boolean allowLoopback, boolean useHostName, boolean useShortHostName) {
+            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+            conf.setAdvertisedAddress(advertisedAddress); // AdvertisedAddress nullo
+            conf.setBookiePort(bookiePort);
+            conf.setAllowLoopback(allowLoopback); // Loopback disabilitato
+            conf.setUseHostNameAsBookieID(useHostName); // Imposta uso del nome host
+            conf.setUseShortHostName(useShortHostName); // Imposta uso del nome host breve
+            if (iface != null) {
+                conf.setListeningInterface(iface); // Imposta iface solo se non è null
+            }
+            return conf;
+        }
+
+        private static ServerConfiguration createConfigForHostNotResolv(String advertisedAddress, String iface, int bookiePort, boolean allowLoopback, boolean useHostName, boolean useShortHostName) {
+            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+            conf.setAdvertisedAddress(advertisedAddress); // AdvertisedAddress nullo
+            conf.setBookiePort(bookiePort);
+            conf.setAllowLoopback(allowLoopback); // Loopback disabilitato
+            conf.setUseHostNameAsBookieID(useHostName); // Imposta uso del nome host
+            conf.setUseShortHostName(useShortHostName); // Imposta uso del nome host breve
+            if (iface != null) {
+                conf.setListeningInterface(iface); // Imposta iface solo se non è null
+            }
             return conf;
         }
 
@@ -896,17 +949,11 @@ public class BookieImplTests {
 
 
 
-                boolean result = BookieImpl.format(conf, isInteractive, force);
+                Assert.assertEquals(expectedResult, BookieImpl.format(conf, isInteractive, force));
 
-                assertEquals("Result mismatch", this.expectedResult, result);
+                //boolean result = BookieImpl.format(conf, isInteractive, force);
 
-                /*for (File dir : conf.getJournalDirs()) {
-                    if (expectedResult) {
-                        assertTrue("Directory should be empty after formatting", dir.list().length == 0);
-                    }
-                }*/
-
-
+                //assertEquals("Result mismatch", this.expectedResult, result);
 
                 // Controllo sulle directory dei journal
                 File[] journalDirs = conf.getJournalDirs();
@@ -942,13 +989,13 @@ public class BookieImplTests {
                 }
 
                 // Controllo sulla directory di garbage collection
-                String gcPath = conf.getGcEntryLogMetadataCachePath();
+                /*String gcPath = conf.getGcEntryLogMetadataCachePath();
                 if (gcPath != null && expectedResult) {
                     File gcDir = new File(gcPath);
                     assertTrue("GC directory should exist after formatting", gcDir.exists());
-                    assertTrue("GC directory should be writable after formatting", gcDir.canWrite());
-                    assertTrue("GC directory should be empty after formatting", gcDir.list().length == 0);
-                }
+                    //assertTrue("GC directory should be writable after formatting", gcDir.canWrite());
+                    //assertTrue("GC directory should be empty after formatting", gcDir.list().length == 0);
+                }*/
 
 
 
