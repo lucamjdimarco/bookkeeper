@@ -841,7 +841,7 @@ public class BookieImplTests {
                     {EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, false, true, "Y", false, false},
                     {EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR, NON_EXISTENT_DIRS, EXISTENT_WITH_FILE, EMPTY_ARRAY, false, true, "Y", false, false},
                     {EMPTY_ARRAY, EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR, EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR, EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR, true, false, "Y", false, false},
-                    {EMPTY_ARRAY, EMPTY_ARRAY, EMPTY_ARRAY, NULL, true, true, "Y", true, false},
+                    {EMPTY_ARRAY, EMPTY_ARRAY, EMPTY_ARRAY, EMPTY_ARRAY, true, true, "Y", true, false},
                     {NULL, NULL, NULL, EMPTY_ARRAY, false, false, "Y", false, true},
             });
         }
@@ -888,23 +888,86 @@ public class BookieImplTests {
                         throw new IllegalArgumentException("Invalid input case: " + this.input);
                 }
 
+                /*assertNotNull("Journal dirs should not be null", conf.getJournalDirs());
+                assertTrue("Journal dirs should not be empty", conf.getJournalDirs().length > 0);
+                for (File dir : conf.getJournalDirs()) {
+                    assertNotNull("Each journal dir should not be null", dir);
+                }*/
+
+
+
                 boolean result = BookieImpl.format(conf, isInteractive, force);
 
                 assertEquals("Result mismatch", this.expectedResult, result);
+
+                /*for (File dir : conf.getJournalDirs()) {
+                    if (expectedResult) {
+                        assertTrue("Directory should be empty after formatting", dir.list().length == 0);
+                    }
+                }*/
+
+
+
+                // Controllo sulle directory dei journal
+                File[] journalDirs = conf.getJournalDirs();
+                if (journalDirs != null && expectedResult) {
+                    for (File dir : journalDirs) {
+                        assertNotNull("Journal directory should not be null", dir);
+                        assertTrue("Journal directory should exist after formatting", dir.exists());
+                        assertTrue("Journal directory should be writable after formatting", dir.canWrite());
+                        assertTrue("Journal directory should be empty after formatting", dir.list().length == 0);
+                    }
+                }
+
+                // Controllo sulle directory dei ledger
+                File[] ledgerDirs = conf.getLedgerDirs();
+                if (ledgerDirs != null && expectedResult) {
+                    for (File dir : ledgerDirs) {
+                        assertNotNull("Ledger directory should not be null", dir);
+                        assertTrue("Ledger directory should exist after formatting", dir.exists());
+                        assertTrue("Ledger directory should be writable after formatting", dir.canWrite());
+                        assertTrue("Ledger directory should be empty after formatting", dir.list().length == 0);
+                    }
+                }
+
+                // Controllo sulle directory degli index
+                File[] indexDirs = conf.getIndexDirs();
+                if (indexDirs != null && expectedResult) {
+                    for (File dir : indexDirs) {
+                        assertNotNull("Index directory should not be null", dir);
+                        assertTrue("Index directory should exist after formatting", dir.exists());
+                        assertTrue("Index directory should be writable after formatting", dir.canWrite());
+                        assertTrue("Index directory should be empty after formatting", dir.list().length == 0);
+                    }
+                }
+
+                // Controllo sulla directory di garbage collection
+                String gcPath = conf.getGcEntryLogMetadataCachePath();
+                if (gcPath != null && expectedResult) {
+                    File gcDir = new File(gcPath);
+                    assertTrue("GC directory should exist after formatting", gcDir.exists());
+                    assertTrue("GC directory should be writable after formatting", gcDir.canWrite());
+                    assertTrue("GC directory should be empty after formatting", gcDir.list().length == 0);
+                }
+
+
+
+                assertFalse("Exception was not expected", this.expException);
+
+                /*assertEquals("Result mismatch", this.expectedResult, result);
                 assertEquals(this.expectedResult, result);
                 assertFalse("Exception was not expected", this.expException);
-                System.out.println(result);
+                System.out.println(result);*/
             } catch (NullPointerException e) {
                 if (!expException) {
                     fail("Unexpected exception thrown: " + e.getMessage());
                 }
-                assertTrue(true);
+                assertTrue("Exception 1", this.expException);
             } catch (Exception e) {
                 if (!expException) {
                     fail("Unexpected exception thrown: " + e.getMessage());
                 }
-                e.printStackTrace();
-                assertTrue(true);
+                assertTrue("Exception 2", this.expException);
             }
         }
 
