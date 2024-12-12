@@ -242,16 +242,16 @@ public class BookieImplTests {
             return Arrays.asList(new Object[][]{
 
                     // valide
-                    //{createConfig("127.0.0.1", 3181), false},    // Advertised address, valid interface, valid port
+                    {createConfig("127.0.0.1", 3181), false},    // Advertised address, valid interface, valid port
 
                     // non valide
-                    //{createConfig("127.0.0.1", -1), true},            // Invalid port (-1)
-                    //{createConfig("127.0.0.1", 65536), true},         // Invalid port (65536)
+                    {createConfig("127.0.0.1", -1), true},            // Invalid port (-1)
+                    {createConfig("127.0.0.1", 65536), true},         // Invalid port (65536)
 
                     //Test modificati e aggiunti per aumentare la coverage di Badua
-                    //{createConfig2("127.0.0.1", 3181, true), false},
-                    //{createConfigWithiface(null, null, 3181, false), true},//AGGIUNTO PER allowLoopBack gestito anche iface == null
-                    //{createConfigForShortName(null, null, 3181, true, true, true), false}, //AGGIUNTO per coprire getUseShortHostName gestito anche iface == null
+                    {createConfig2("127.0.0.1", 3181, true), false},
+                    {createConfigWithiface(null, null, 3181, false), true},//AGGIUNTO PER allowLoopBack gestito anche iface == null
+                    {createConfigForShortName(null, null, 3181, true, true, true), false}, //AGGIUNTO per coprire getUseShortHostName gestito anche iface == null
                     {createConfigForHostNotResolv(null, "nonexistent_interface", 3181, true, false, false), true} //AGGIUNTO per coprire UnknownHostInterface
 
             });
