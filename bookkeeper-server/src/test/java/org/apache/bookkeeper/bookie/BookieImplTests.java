@@ -251,8 +251,13 @@ public class BookieImplTests {
                     //Test modificati e aggiunti per aumentare la coverage di Badua
                     {createConfig2("127.0.0.1", 3181, true), false},
                     {createConfigWithiface(null, null, 3181, false), true},//AGGIUNTO PER allowLoopBack gestito anche iface == null
+                    /* 1 */{createConfigWithiface(null, null, 3181, true), false},
                     {createConfigForShortName(null, null, 3181, true, true, true), false}, //AGGIUNTO per coprire getUseShortHostName gestito anche iface == null
-                    {createConfigForHostNotResolv(null, "nonexistent_interface", 3181, true, false, false), true} //AGGIUNTO per coprire UnknownHostInterface
+                    {createConfigForHostNotResolv(null, "nonexistent_interface", 3181, true, false, false), true}, //AGGIUNTO per coprire UnknownHostInterface
+
+                    {createConfigWithiface(null, null, 3181, true), false}, // iface null -> deve coprire il fallback a "default"
+                    {createConfigForHostNotResolv(null, "invalid_interface", 3181, true, false, false), true}, // Hostname non risolvibile
+                    {createConfig2("127.0.0.1", 3181, false), true}, // Loopback non consentito
 
             });
         }
@@ -313,11 +318,18 @@ public class BookieImplTests {
         public void testGetBookieAddress() {
             try {
                 BookieSocketAddress address = BookieImpl.getBookieAddress(conf);
+
                 if (expectException) {
                     fail("Expected an exception, but none was thrown.");
                 }
                 assertNotNull("BookieSocketAddress should not be null for valid configuration.", address);
-            } catch (Exception e) {
+            } catch (UnknownHostException e){ //2
+                if (!expectException) {
+                    fail("Unexpected exception thrown: " + e.getMessage());
+                }
+                Assert.assertTrue("Expected exception thrown: " + e.getMessage(), expectException);
+            }
+            catch (Exception e) {
                 if (!expectException) {
                     fail("Unexpected exception thrown: " + e.getMessage());
                 }
