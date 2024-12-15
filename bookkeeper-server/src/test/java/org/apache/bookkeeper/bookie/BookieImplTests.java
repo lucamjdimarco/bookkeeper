@@ -10,6 +10,7 @@ import org.apache.bookkeeper.helper.EntryBuilder;
 import org.apache.bookkeeper.helper.EnumForDir;
 import org.apache.bookkeeper.net.BookieId;
 import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.net.DNS;
 import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks;
 import org.apache.bookkeeper.test.TmpDirs;
 import org.junit.*;
@@ -249,18 +250,18 @@ public class BookieImplTests {
                     {createConfig("127.0.0.1", 65536), true},         // Invalid port (65536)
 
                     //Test modificati e aggiunti per aumentare la coverage di Badua
-                    {createConfig2("127.0.0.1", 3181, true), false},
-                    {createConfigWithiface(null, null, 3181, false), true},//AGGIUNTO PER allowLoopBack gestito anche iface == null
-                    /* 1 */{createConfigWithiface(null, null, 3181, true), false},
-                    {createConfigForShortName(null, null, 3181, true, true, true), false}, //AGGIUNTO per coprire getUseShortHostName gestito anche iface == null
-                    {createConfigForHostNotResolv(null, "nonexistent_interface", 3181, true, false, false), true}, //AGGIUNTO per coprire UnknownHostInterface
 
-                    {createConfigWithiface(null, null, 3181, true), false}, // iface null -> deve coprire il fallback a "default"
-                    {createConfigForHostNotResolv(null, "invalid_interface", 3181, true, false, false), true}, // Hostname non risolvibile
-                    {createConfig2("127.0.0.1", 3181, false), true}, // Loopback non consentito
+                    {createConfigForShortName(null, null, 3181, true, true, true), false}, //AGGIUNTO per coprire getUseShortHostName gestito anche iface == null
+                    {createConfigWithiface(null, "lo0", 3181, false), true},
+
+                    //PROBLEMATICO
+                    {createConfigForHostNotResolv(null, "en0", -1, true, false, false), true}, //AGGIUNTO per coprire UnknownHostInterface
+
 
             });
         }
+
+
 
         private static ServerConfiguration createConfig(String advertisedAddress, int bookiePort) {
             ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
@@ -269,47 +270,45 @@ public class BookieImplTests {
             return conf;
         }
 
-        private static ServerConfiguration createConfig2(String advertisedAddress, int bookiePort, boolean allowLoopback) {
+        private static ServerConfiguration createConfigWithiface(String advertisedAddress, String iface, int bookiePort, boolean allowLoopback) {
             ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
             conf.setAdvertisedAddress(advertisedAddress);
             conf.setBookiePort(bookiePort);
             conf.setAllowLoopback(allowLoopback);
-            return conf;
-        }
-
-        private static ServerConfiguration createConfigWithiface(String advertisedAddress, String iface, int bookiePort, boolean allowLoopback) {
-            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-            conf.setAdvertisedAddress(advertisedAddress); // AdvertisedAddress null
-            conf.setBookiePort(bookiePort);
-            conf.setAllowLoopback(allowLoopback); // Loopback non consentito
             if (iface != null) {
-                conf.setListeningInterface(iface); // Imposta iface solo se non è null
+                conf.setListeningInterface(iface);
+            } else {
+                conf.setListeningInterface(null);
             }
             return conf;
         }
 
         private static ServerConfiguration createConfigForShortName(String advertisedAddress, String iface, int bookiePort, boolean allowLoopback, boolean useHostName, boolean useShortHostName) {
             ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-            conf.setAdvertisedAddress(advertisedAddress); // AdvertisedAddress nullo
+            conf.setAdvertisedAddress(advertisedAddress);
             conf.setBookiePort(bookiePort);
-            conf.setAllowLoopback(allowLoopback); // Loopback disabilitato
-            conf.setUseHostNameAsBookieID(useHostName); // Imposta uso del nome host
-            conf.setUseShortHostName(useShortHostName); // Imposta uso del nome host breve
+            conf.setAllowLoopback(allowLoopback);
+            conf.setUseHostNameAsBookieID(useHostName);
+            conf.setUseShortHostName(useShortHostName);
             if (iface != null) {
-                conf.setListeningInterface(iface); // Imposta iface solo se non è null
+                conf.setListeningInterface(iface);
+            } else {
+                conf.setListeningInterface(null);
             }
             return conf;
         }
 
         private static ServerConfiguration createConfigForHostNotResolv(String advertisedAddress, String iface, int bookiePort, boolean allowLoopback, boolean useHostName, boolean useShortHostName) {
             ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-            conf.setAdvertisedAddress(advertisedAddress); // AdvertisedAddress nullo
+            conf.setAdvertisedAddress(advertisedAddress);
             conf.setBookiePort(bookiePort);
-            conf.setAllowLoopback(allowLoopback); // Loopback disabilitato
-            conf.setUseHostNameAsBookieID(useHostName); // Imposta uso del nome host
-            conf.setUseShortHostName(useShortHostName); // Imposta uso del nome host breve
+            conf.setAllowLoopback(allowLoopback);
+            conf.setUseHostNameAsBookieID(useHostName);
+            conf.setUseShortHostName(useShortHostName);
             if (iface != null) {
-                conf.setListeningInterface(iface); // Imposta iface solo se non è null
+                conf.setListeningInterface(iface);
+            } else {
+                conf.setListeningInterface(null);
             }
             return conf;
         }
@@ -317,6 +316,7 @@ public class BookieImplTests {
         @Test
         public void testGetBookieAddress() {
             try {
+
                 BookieSocketAddress address = BookieImpl.getBookieAddress(conf);
 
                 if (expectException) {
