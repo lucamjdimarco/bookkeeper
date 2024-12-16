@@ -250,12 +250,15 @@ public class BookieImplTests {
                     {createConfig("127.0.0.1", 65536), true},         // Invalid port (65536)
 
                     //Test modificati e aggiunti per aumentare la coverage di Badua
+                    // ######################
 
                     {createConfigForShortName(null, null, 3181, true, true, true), false}, //AGGIUNTO per coprire getUseShortHostName gestito anche iface == null
                     {createConfigWithiface(null, "lo0", 3181, false), true},
 
+                    // ######################
+                    //gli altri 0 covered non li posso coprire perché sono metodi statici
                     //PROBLEMATICO
-                    {createConfigForHostNotResolv(null, "en0", -1, true, false, false), true}, //AGGIUNTO per coprire UnknownHostInterface
+                    //{createConfigForHostNotResolv(null, "en0", -1, true, false, false), true}, //AGGIUNTO per coprire UnknownHostInterface
 
 
             });
@@ -649,6 +652,8 @@ public class BookieImplTests {
                     {1L, null, null, null, "".getBytes(), true},
                     {1L, EntryBuilder.createInvalidEntryWithoutMetadata(), null, new Object(), null, true},
                     {-1L, EntryBuilder.createValidEntry(), mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), true},
+                    //aumentare badua (?)
+                    //{2L, EntryBuilder.createValidEntry(), mockWriteCallback(), new Object(), "MasterKey".getBytes(), false},
             });
         }
 
@@ -672,6 +677,7 @@ public class BookieImplTests {
 
                 // SetExplicitLac
                 bookie.setExplicitLac(Unpooled.copiedBuffer(lacEntry), writeCallback, ctx, masterKey);
+                assertTrue("ExplicitLACEntry should have been set.", lacEntry.readableBytes() > 0);
 
                 byte[] content = new byte[lacEntry.readableBytes()];
                 lacEntry.getBytes(lacEntry.readerIndex(), content);
