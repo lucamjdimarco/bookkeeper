@@ -483,5 +483,50 @@
       </build>
     </profile>
     <!-- ######### AGGIUNTA PER BADUA ######### -->
+
+    <!-- ######## AGGIUNTA PER PIT ######## -->
+    <profile>
+      <id>mutation-testing</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <properties>
+        <pitest.version>1.8.0</pitest.version>
+        <pitest.history.file>${project.build.directory}/pitest.history</pitest.history.file>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-maven</artifactId>
+            <version>${pitest.version}</version>
+            <configuration>
+              <targetClasses>
+                <param>org.apache.bookkeeper.bookie.BookieImpl</param>
+                <!--<param>org.apache.bookkeeper.client.LedgerHandle</param>-->
+              </targetClasses>
+              <targetTests>
+                <param>org.apache.bookkeeper.bookie.BookieImplTests</param>
+                <!--<param>org.apache.bookkeeper.client.LedgerHandleTests</param>-->
+              </targetTests>
+              <avoidCallsTo>
+                <avoidCallsTo>org.slf4j</avoidCallsTo>
+              </avoidCallsTo>
+              <historyInputFile>${pitest.history.file}</historyInputFile>
+              <historyOutputFile>${pitest.history.file}</historyOutputFile>
+            </configuration>
+            <executions>
+              <execution>
+                <id>Generate PIT report</id>
+                <phase>test-compile</phase>
+                <goals>
+                  <goal>mutationCoverage</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
   </profiles>
 </project>
