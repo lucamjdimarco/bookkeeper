@@ -263,6 +263,7 @@ public class BookieImplTests {
                     //gli altri 0 covered non li posso coprire perché sono metodi statici
                     //PROBLEMATICO
                     //{createConfigForHostNotResolv(null, "en0", -1, true, false, false), true}, //AGGIUNTO per coprire UnknownHostInterface
+                    //{createConfig("     ", 3181), false}, //AGGIUNTO per PIT
 
 
             });
@@ -435,7 +436,7 @@ public class BookieImplTests {
                     {createInvalidConfig(), createMockLedgerStorage(false), true}, // conf invalida con ledgerStorage non inizializzato
                     {createValidConfig(), createMockLedgerStorage(true), true},    // conf valida con ledgerStorage già inizializzato
 
-                    //
+                    // Da eliminare ??
                     {createValidConfig(), null, false},
             });
         }
