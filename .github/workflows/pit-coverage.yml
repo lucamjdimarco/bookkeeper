@@ -39,4 +39,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: pit-mutation-testing-report
-          path: bookkeeper-server/target/pit-reports
+          path: bookkeeper-server/target/pit-reports/**
