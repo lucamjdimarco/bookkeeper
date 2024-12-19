@@ -726,7 +726,12 @@ public class BookieImplTests {
         private final boolean expectException;
         private final Class<? extends Exception> exceptionClass;
 
+        private File dir;
+        private final TmpDirs tmpDirs=new TmpDirs();
+
         private BookieImpl bookie;
+
+        private static int counter = 0;
 
         public BookieImplEntryIntegrationTest(ByteBuf entry, boolean ackBeforeSync, BookkeeperInternalCallbacks.WriteCallback cb,
                                               Object ctx, byte[] masterKey, Long testLedgerId,
@@ -752,14 +757,22 @@ public class BookieImplTests {
                     {EntryBuilder.createInvalidEntryWithoutMetadata(), false, mockWriteCallback(), new Object(), "".getBytes(StandardCharsets.UTF_8), null, false, true, null},
 
                     //PIT
-                    {EntryBuilder.createValidEntry(), false, null, new Object(), "ValidMasterKey".getBytes(), null, true, true, LedgerDirsManager.NoWritableLedgerDirException.class},
+                    {null, false, null, new Object(), "ValidMasterKey".getBytes(), null, true, true, LedgerDirsManager.NoWritableLedgerDirException.class},
             });
         }
 
         @Before
         public void setup() throws Exception {
+            this.dir = this.tmpDirs.createNew("bookieEntryTest", ".tmp");
+
             ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+
+            conf.setJournalDirName(this.dir.toString());
+            conf.setLedgerDirNames(new String[]{this.dir.getAbsolutePath()});
+
             bookie = new TestBookieImpl(conf);
+
+            //this.bookie.statsLogger.getOpStatsLogger("").clear();
         }
 
         @Test
@@ -768,10 +781,11 @@ public class BookieImplTests {
                 // addEntry
                 bookie.addEntry(entry, ackBeforeSync, cb, ctx, masterKey);
 
+                assertEquals((EntryBuilder.createValidEntry().readableBytes()), ((TestStatsLogger.TestOpStatsLogger) this.bookie.statsLogger.getOpStatsLogger("")).getNumSuccessfulEvent());
+
                 if (expectException && exceptionClass == null) {
                     fail("Expected an exception, but none was thrown.");
                 }
-
 
                 if (!expectException) {
                     long ledgerId = (testLedgerId != null) ? testLedgerId : EntryBuilder.extractLedgerId(entry);
@@ -779,6 +793,10 @@ public class BookieImplTests {
 
                     ByteBuf result = bookie.readEntry(ledgerId, entryId);
                     assertNotNull("Resulting ByteBuf should not be null for valid inputs.", result);
+
+                    if(EntryBuilder.isValidEntry(entry)) {
+                        assertEquals(2*(EntryBuilder.createValidEntry().readableBytes()), ((TestStatsLogger.TestOpStatsLogger) this.bookie.statsLogger.getOpStatsLogger("")).getNumSuccessfulEvent());
+                    }
 
                     byte[] addedContent = new byte[entry.readableBytes()];
                     entry.getBytes(entry.readerIndex(), addedContent);
@@ -838,9 +856,19 @@ public class BookieImplTests {
                     }
 
 
+
                 }
 
             } catch (Exception e) {
+                if(entry!=null){
+                    if(EntryBuilder.isInvalidEntry(entry)){
+                        assertEquals(EntryBuilder.createInvalidEntry().readableBytes(), ((TestStatsLogger.TestOpStatsLogger) this.bookie.statsLogger.getOpStatsLogger("")).getNumFailedEvent());
+                    } else if(EntryBuilder.isInvalidEntryWithoutMetadata(entry)){
+                        assertEquals(EntryBuilder.createInvalidEntryWithoutMetadata().readableBytes(), ((TestStatsLogger.TestOpStatsLogger) this.bookie.statsLogger.getOpStatsLogger("")).getNumFailedEvent());
+                    }
+
+
+                }
                 if (!expectException) {
                     fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
                 }
@@ -850,7 +878,6 @@ public class BookieImplTests {
         @Test
         public void recoveryAddEntryTest() {
             try {
-
 
                 if(exceptionClass != null && expectException) {
                     BookieImpl spyBookie = spy(bookie);
@@ -871,8 +898,11 @@ public class BookieImplTests {
                     long entryId = EntryBuilder.extractEntryId(entry);
                     ByteBuf result = bookie.readEntry(ledgerId, entryId);
 
+
                     assertNotNull("Recovered entry should be readable.", result);
                     assertEquals("Entry content should match.", entry, result);
+
+                    assertTrue(((TestStatsLogger.TestOpStatsLogger) this.bookie.statsLogger.getOpStatsLogger("")).getNumSuccessfulEvent() > 0);
 
                     if (expectException) {
                         fail("Expected an exception, but none was thrown.");
@@ -885,16 +915,23 @@ public class BookieImplTests {
                             e.getMessage().contains("No writable ledger directory"));
 
                 }
+
             } catch (Exception e) {
                 if (!expectException) {
                     fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
                 }
+
             }
         }
 
         @After
-        public void teardown() throws Exception {
-            bookie.shutdown();
+        public void teardown() {
+            try {
+                tmpDirs.cleanup();
+                bookie.shutdown();
+            } catch (Exception e) {
+                fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
+            }
         }
 
         private static BookkeeperInternalCallbacks.WriteCallback mockWriteCallback() {
@@ -905,6 +942,51 @@ public class BookieImplTests {
             };
         }
     }
+
+    /*public static class BookieImplReadEntryFailureTest {
+
+        private File dir;
+        private final TmpDirs tmpDirs = new TmpDirs();
+        private BookieImpl bookie;
+
+        @Before
+        public void setup() throws Exception {
+
+            this.dir = this.tmpDirs.createNew("bookieEntryTest", ".tmp");
+
+            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
+            conf.setJournalDirName(this.dir.toString());
+            conf.setLedgerDirNames(new String[]{this.dir.getAbsolutePath()});
+
+            bookie = new TestBookieImpl(conf);
+        }
+
+        @Test
+        public void readEntryFailureTest() {
+            try {
+                long invalidLedgerId = -1L;
+                long invalidEntryId = -1L;
+
+                bookie.readEntry(invalidLedgerId, invalidEntryId);
+                fail("Expected an exception for invalid ledgerId and entryId, but none was thrown.");
+            } catch (IOException | BookieException e) {
+                assertTrue("Correct exception for invalid ledgerId and entryId.", true);
+                assertEquals(((TestStatsLogger.TestOpStatsLogger) this.bookie.statsLogger.getOpStatsLogger("")).getNumFailedEvent(), 0);
+            } catch (Exception e) {
+                fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
+            }
+        }
+
+        @After
+        public void teardown() {
+            try {
+                tmpDirs.cleanup();
+                bookie.shutdown();
+            } catch (Exception e) {
+                fail("Unexpected exception thrown during teardown: " + e.getClass().getSimpleName());
+            }
+        }
+    }*/
 
     @RunWith(Parameterized.class)
     public static class OptimizedFormatTest {
