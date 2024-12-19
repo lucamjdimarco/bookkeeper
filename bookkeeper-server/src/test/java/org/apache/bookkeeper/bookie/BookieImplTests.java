@@ -12,7 +12,10 @@ import org.apache.bookkeeper.net.BookieId;
 import org.apache.bookkeeper.net.BookieSocketAddress;
 import org.apache.bookkeeper.net.DNS;
 import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks;
+import org.apache.bookkeeper.stats.StatsLogger;
+import org.apache.bookkeeper.test.TestStatsProvider;
 import org.apache.bookkeeper.test.TmpDirs;
+import org.awaitility.Awaitility;
 import org.junit.*;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
@@ -31,6 +34,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
@@ -720,11 +724,13 @@ public class BookieImplTests {
         private final Long testLedgerId;
         private final boolean useWatcher;
         private final boolean expectException;
+        private final Class<? extends Exception> exceptionClass;
 
         private BookieImpl bookie;
 
         public BookieImplEntryIntegrationTest(ByteBuf entry, boolean ackBeforeSync, BookkeeperInternalCallbacks.WriteCallback cb,
-                                                         Object ctx, byte[] masterKey, Long testLedgerId, boolean useWatcher, boolean expectException) {
+                                              Object ctx, byte[] masterKey, Long testLedgerId,
+                                              boolean useWatcher, boolean expectException, Class<? extends Exception> exceptionClass) {
             this.entry = entry;
             this.ackBeforeSync = ackBeforeSync;
             this.cb = cb;
@@ -733,16 +739,20 @@ public class BookieImplTests {
             this.testLedgerId = testLedgerId;
             this.useWatcher = useWatcher;
             this.expectException = expectException;
+            this.exceptionClass = exceptionClass;
         }
 
         @Parameterized.Parameters
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
                     // valid case
-                    {EntryBuilder.createValidEntry(), true, mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), null, true, false},
+                    {EntryBuilder.createValidEntry(), true, mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), null, true, false, null},
                     // invalid case
-                    {null, true, null, null, "ValidMasterKey".getBytes(), -1L, true, true},
-                    {EntryBuilder.createInvalidEntryWithoutMetadata(), false, mockWriteCallback(), new Object(), "".getBytes(StandardCharsets.UTF_8), null, false, true},
+                    {null, true, null, null, "ValidMasterKey".getBytes(), -1L, true, true, null},
+                    {EntryBuilder.createInvalidEntryWithoutMetadata(), false, mockWriteCallback(), new Object(), "".getBytes(StandardCharsets.UTF_8), null, false, true, null},
+
+                    //PIT
+                    {EntryBuilder.createValidEntry(), false, null, new Object(), "ValidMasterKey".getBytes(), null, true, true, LedgerDirsManager.NoWritableLedgerDirException.class},
             });
         }
 
@@ -758,13 +768,12 @@ public class BookieImplTests {
                 // addEntry
                 bookie.addEntry(entry, ackBeforeSync, cb, ctx, masterKey);
 
-                if (expectException) {
+                if (expectException && exceptionClass == null) {
                     fail("Expected an exception, but none was thrown.");
                 }
 
 
                 if (!expectException) {
-                    //long ledgerId = EntryBuilder.extractLedgerId(entry);
                     long ledgerId = (testLedgerId != null) ? testLedgerId : EntryBuilder.extractLedgerId(entry);
                     long entryId = EntryBuilder.extractEntryId(entry);
 
@@ -782,9 +791,6 @@ public class BookieImplTests {
 
                     assertEquals("The read content should match the added content.", addedContentStr, readContentStr);
 
-                    // Test readLastAddConfirmed
-                    //long lastAddConfirmed = bookie.readLastAddConfirmed(ledgerId);
-                    //assertEquals("LastAddConfirmed should be the same as the entry ID.", entryId, lastAddConfirmed);
                     // Test readLastAddConfirmed
                     if (testLedgerId == null) {
                         long lastAddConfirmed = bookie.readLastAddConfirmed(ledgerId);
@@ -844,9 +850,40 @@ public class BookieImplTests {
         @Test
         public void recoveryAddEntryTest() {
             try {
-                bookie.recoveryAddEntry(entry, cb, ctx, masterKey);
+
+
+                if(exceptionClass != null && expectException) {
+                    BookieImpl spyBookie = spy(bookie);
+
+                    if (exceptionClass.equals(LedgerDirsManager.NoWritableLedgerDirException.class)) {
+                        doThrow(new LedgerDirsManager.NoWritableLedgerDirException("No writable ledger directory"))
+                                .when(spyBookie).getLedgerForEntry(any(ByteBuf.class), any(byte[].class));
+                    }
+
+                    spyBookie.recoveryAddEntry(entry, cb, ctx, masterKey);
+
+                    fail("Expected exception but none was thrown.");
+                } else {
+
+                    bookie.recoveryAddEntry(entry, cb, ctx, masterKey);
+                    assertTrue("Recovery add entry completed without exceptions", true);
+                    long ledgerId = EntryBuilder.extractLedgerId(entry);
+                    long entryId = EntryBuilder.extractEntryId(entry);
+                    ByteBuf result = bookie.readEntry(ledgerId, entryId);
+
+                    assertNotNull("Recovered entry should be readable.", result);
+                    assertEquals("Entry content should match.", entry, result);
+
+                    if (expectException) {
+                        fail("Expected an exception, but none was thrown.");
+                    }
+                }
+
+            } catch (IOException e) {
                 if (expectException) {
-                    fail("Expected an exception, but none was thrown.");
+                    assertTrue("Correct exception for NoWritableLedgerDirException.",
+                            e.getMessage().contains("No writable ledger directory"));
+
                 }
             } catch (Exception e) {
                 if (!expectException) {
