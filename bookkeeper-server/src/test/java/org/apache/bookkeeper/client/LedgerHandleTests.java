@@ -21,6 +21,7 @@ import org.mockito.internal.matchers.Null;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
@@ -123,13 +124,13 @@ public class LedgerHandleTests {
         private final long firstEntry;
         private final long lastEntry;
         private final Object ctx;
-        private final AsyncCallback.ReadCallback cb;
+        private final boolean cb;
         private final boolean expectedException;
         private final int expectedErrorCode;
 
         private LedgerHandle ledgerHandle;
 
-        public AsyncReadEntriesTest(long firstEntry, long lastEntry, AsyncCallback.ReadCallback cb, Object ctx,
+        public AsyncReadEntriesTest(long firstEntry, long lastEntry, boolean cb, Object ctx,
                                     boolean expectedException, int expectedErrorCode) {
             super(3);
             this.firstEntry = firstEntry;
@@ -145,12 +146,12 @@ public class LedgerHandleTests {
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
                     //valid
-                    {0, 2, null, null, false, BKException.Code.OK},
+                    {0, 2, false, null, false, BKException.Code.OK},
                     //invalid
-                    {-1, 2, mockReadCallback(), new Object(), true, BKException.Code.IncorrectParameterException},
-                    {2, -1, null, null, true, BKException.Code.IncorrectParameterException},
-                    {3, 1, mockReadCallback(), null, true, BKException.Code.IncorrectParameterException},
-                    {0, 100, mockReadCallback(), null, true, BKException.Code.ReadException},
+                    {-1, 2, true, new Object(), true, BKException.Code.IncorrectParameterException},
+                    {2, -1, false, null, true, BKException.Code.IncorrectParameterException},
+                    {3, 1, true, null, true, BKException.Code.IncorrectParameterException},
+                    {0, 100, false, null, true, BKException.Code.ReadException},
             });
         }
 
@@ -168,7 +169,37 @@ public class LedgerHandleTests {
         public void testAsyncReadEntries() {
 
             try {
-                ledgerHandle.asyncReadEntries(firstEntry, lastEntry, cb, ctx);
+                //ledgerHandle.asyncReadEntries(firstEntry, lastEntry, cb, ctx);
+
+                if(cb) {
+                    AtomicInteger rcResult = new AtomicInteger(BKException.Code.OK);
+                    AtomicBoolean complete = new AtomicBoolean(false);
+
+                    ledgerHandle.asyncReadEntries(firstEntry, lastEntry, (rc, lh, entries, ctx) -> {
+                        rcResult.set(rc);
+                        if (rc == BKException.Code.OK) {
+                            assertNotNull("Entries should not be null on successful read", entries);
+                            assertTrue("Entries should contain at least one element", entries.hasMoreElements());
+                        } else {
+                            assertEquals("Unexpected error code", expectedErrorCode, rc);
+                        }
+                        complete.set(true);
+                    }, ctx);
+
+                    Awaitility.await().untilTrue(complete);
+
+                    if (!expectedException) {
+                        assertEquals("Expected successful read", BKException.Code.OK, rcResult.get());
+                    } else {
+                        assertEquals("Expected failure with specific error code", expectedErrorCode, rcResult.get());
+                    }
+                } else {
+                    ledgerHandle.asyncReadEntries(firstEntry, lastEntry, null, ctx);
+
+                    if(expectedException) {
+                        fail("Expected exception, but method executed successfully.");
+                    }
+                }
 
 
             } catch (NullPointerException e ){
@@ -324,6 +355,7 @@ public class LedgerHandleTests {
         public void setUp() throws Exception {
             super.setUp("/ledgers");
             ledgerHandle = bkc.createLedger(BookKeeper.DigestType.CRC32, "passwd".getBytes());
+
 
 
 
