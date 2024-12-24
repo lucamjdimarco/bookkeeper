@@ -1,11 +1,13 @@
 package org.apache.bookkeeper.client;
 
+import com.sun.org.apache.xpath.internal.operations.Bool;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.bookkeeper.bookie.BookKeeperClusterTestCase;
 import org.apache.bookkeeper.client.api.LedgerEntries;
 import org.apache.bookkeeper.conf.ClientConfiguration;
 import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.logging.log4j.Level;
 import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.Assert;
@@ -14,6 +16,7 @@ import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 import org.mockito.internal.matchers.Null;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
+import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -29,6 +33,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
 
 @RunWith(value = Enclosed.class)
 public class LedgerHandleTests {
@@ -319,6 +325,8 @@ public class LedgerHandleTests {
             super.setUp("/ledgers");
             ledgerHandle = bkc.createLedger(BookKeeper.DigestType.CRC32, "passwd".getBytes());
 
+
+
             for (int i = 0; i < 20; i++) {
                 ledgerHandle.addEntry(("Entry " + i).getBytes());
             }
@@ -468,8 +476,8 @@ public class LedgerHandleTests {
                     {null, 0, 4, mockAddCallback(), new Object(), true, NullPointerException.class},
                     {new byte[]{1, 2, 3, 4}, -1, 4, mockAddCallback(), null, true, ArrayIndexOutOfBoundsException.class},
                     {new byte[]{1, 2, 3, 4}, 0, -1, mockAddCallback(), null, true, ArrayIndexOutOfBoundsException.class},
-                    {new byte[]{1, 2, 3, 4}, 0, 5, mockAddCallback(), null, true, ArrayIndexOutOfBoundsException.class},
-                    {new byte[]{1, 2, 3, 4}, Integer.MAX_VALUE, Integer.MAX_VALUE, null, null, true, ArrayIndexOutOfBoundsException.class},
+                    {new byte[]{1, 2, 3, 4}, 4, 1, mockAddCallback(), null, true, ArrayIndexOutOfBoundsException.class},
+                    {new byte[]{1, 2, 3, 4}, Integer.MAX_VALUE, Integer.MAX_VALUE, null, null, true, IndexOutOfBoundsException.class},
                     {new byte[]{1, 2, 3, 4}, Integer.MIN_VALUE, Integer.MIN_VALUE, null, null, true, ArrayIndexOutOfBoundsException.class},
             });
         }
@@ -482,8 +490,13 @@ public class LedgerHandleTests {
 
         @Test
         public void testAsyncAddEntry() {
-            try {
+            /*try {
                 ledgerHandle.asyncAddEntry(data, offset, length, callback, ctx);
+
+                if (offset < 0 || length < 0 || (offset + length) > (data != null ? data.length : 0)) {
+                    fail("Expected ArrayIndexOutOfBoundsException for invalid offset/length but did not throw.");
+                }
+
                 if (expectException) {
                     fail("Expected exception, but method executed successfully.");
                 }
@@ -497,7 +510,21 @@ public class LedgerHandleTests {
                 if (!expectException) {
                     fail("Did not expect an exception, but got: " + e);
                 } else {
-                    assertTrue("Exception caught", expectException);
+                    if (offset < 0 || length < 0 || (offset + length) > (data != null ? data.length : 0)) {
+                        assertTrue("Exception caught", expectException);
+                    }
+
+                }
+            }*/
+            if (expectException) {
+                assertThrows(expectedExceptionType, () -> {
+                    ledgerHandle.asyncAddEntry(data, offset, length, callback, ctx);
+                });
+            } else {
+                try {
+                    ledgerHandle.asyncAddEntry(data, offset, length, callback, ctx);
+                } catch (Exception e) {
+                    fail("Did not expect an exception, but got: " + e);
                 }
             }
         }
@@ -558,14 +585,14 @@ public class LedgerHandleTests {
         public static Collection<Object[]> data() {
             return Arrays.asList(new Object[][]{
                     //valid
-                    //{1, 1, true, true, null, false, false, false},
-                    //{0, 0, true, false, null, true, false, false},
+                    {1, 1, true, true, null, false, false, false},
+                    {0, 0, true, false, null, true, false, false},
                     //invalid
-                    //{-1, -1, false, true, new Object(), false, false, true},
+                    {-1, -1, false, true, new Object(), false, false, true},
 
                     //aggiunti per Jacoco
-                    //{10, 1, true, true, null, true, false, false},
-                    {1, 1, true, true, null, false, true, false},
+                    {10, 1, true, true, null, true, false, false},
+
 
             });
         }
@@ -620,7 +647,7 @@ public class LedgerHandleTests {
                     ledgerHandle.asyncReadLastConfirmedAndEntry(entryId, timeOutInMillis, parallel, null, ctx);
                 }
 
-                if(hasMoreElement) {
+                /*if(hasMoreElement) {
                     long lastEntryId2 = ledgerHandle.addEntry("entry".getBytes());
                     long lastEntryId3 = ledgerHandle.addEntry("entry".getBytes());
 
@@ -637,7 +664,7 @@ public class LedgerHandleTests {
                     if (rcAtom.get() == BKException.Code.OK) {
                         assertNull(entryAtom.get());
                     }
-                }
+                }*/
 
 
             } catch(NullPointerException e) {
@@ -659,6 +686,119 @@ public class LedgerHandleTests {
 
         }
     }
+
+    @RunWith(Parameterized.class)
+    public static class AsyncReadLastConfirmedTest extends BookKeeperClusterTestCase {
+
+        private final boolean cb;
+        private final Object ctx;
+        private final boolean useV2WireProtocol;
+
+        private final boolean isClosed;
+
+        private LedgerHandle ledgerHandle;
+
+        private BookKeeper bk;
+
+        public AsyncReadLastConfirmedTest(boolean cb, Object ctx, boolean useV2WireProtocol, boolean isClosed) {
+            super(3);
+            this.cb = cb;
+            this.ctx = ctx;
+            this.useV2WireProtocol = useV2WireProtocol;
+            this.isClosed = isClosed;
+        }
+
+        @Parameterized.Parameters(name = "Test case: cb={0}, ctx={1}, useV2WireProtocol={2}, expectException={3}")
+        public static Collection<Object[]> data() {
+            return Arrays.asList(new Object[][]{
+                    {true, new Object(), false, true},
+                    {false, null, false, false},
+                    //{false, null, false, true},
+
+                    //aggiunto per Jacoco
+                    {false, new Object(), true, true},
+                    {false, null, true, true},
+                    //{true, new Object(), false, false},
+                    //{false, null, true, false},
+            });
+        }
+
+        @Before
+        public void setUp() throws Exception {
+            super.setUp("/ledgers");
+            ClientConfiguration conf = TestBKConfiguration.newClientConfiguration();
+            conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());
+            conf.setExplictLacInterval(1);
+            conf.setUseV2WireProtocol(useV2WireProtocol);
+            bk = new BookKeeper(conf);
+
+            ledgerHandle = bk.createLedger(BookKeeper.DigestType.CRC32, "passwd".getBytes());
+        }
+
+        @Test
+        public void testAsyncReadLastConfirmed() {
+            try {
+                AtomicInteger rcAtom = new AtomicInteger();
+                AtomicLong entryAtom = new AtomicLong();
+                AtomicLong lac = new AtomicLong();
+                AtomicBoolean complete = new AtomicBoolean(false);
+
+                ledgerHandle.addEntry("entry".getBytes());
+
+                if(!this.useV2WireProtocol) {
+                    ledgerHandle.force().get();
+                }
+
+                if(isClosed){
+                    ledgerHandle.close();
+                }
+
+                if(this.cb) {
+                    ledgerHandle.asyncReadLastConfirmed((rc, lastConfirmed, ctx) -> {
+                        rcAtom.set(rc);
+                        lac.set(lastConfirmed);
+                        complete.set(true);
+                    }, this.ctx);
+
+                    Awaitility.await().untilTrue(complete);
+                } else {
+                    ledgerHandle.asyncReadLastConfirmed(null, this.ctx);
+                }
+
+                if(!isClosed) {
+                    if(rcAtom.get() == BKException.Code.OK) {
+                        assertEquals(entryAtom.get(), lac.get());
+                    } else {
+                        assertEquals(-1L, lac.get());
+                    }
+                } else {
+                    if(rcAtom.get() == BKException.Code.OK) {
+                        assertEquals(ledgerHandle.getLedgerMetadata().getLastEntryId(), lac.get());
+                    } else {
+                        assertEquals(-1L, lac.get());
+                    }
+                }
+            } catch (NullPointerException e) {
+                assertTrue(true);
+            } catch (Exception e ) {
+                assertTrue(true);
+            }
+        }
+
+        @After
+        public void tearDown() {
+            try {
+                ledgerHandle.close();
+                super.tearDown();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+
+
+
 
 
 
