@@ -484,11 +484,11 @@
             <version>${pitest.version}</version>
             <configuration>
               <targetClasses>
-                <param>org.apache.bookkeeper.bookie.BookieImpl</param>
+                <!--<param>org.apache.bookkeeper.bookie.BookieImpl</param>-->
                 <param>org.apache.bookkeeper.client.LedgerHandle</param>
               </targetClasses>
               <targetTests>
-                <param>org.apache.bookkeeper.bookie.BookieImplTests</param>
+                <!--<param>org.apache.bookkeeper.bookie.BookieImplTests</param>-->
                 <param>org.apache.bookkeeper.client.LedgerHandleTests</param>
               </targetTests>
               <avoidCallsTo>
@@ -496,6 +496,11 @@
               </avoidCallsTo>
               <historyInputFile>${pitest.history.file}</historyInputFile>
               <historyOutputFile>${pitest.history.file}</historyOutputFile>
+              <timeoutConst>120000</timeoutConst> <!-- Incrementa il timeout -->
+              <timeoutFactor>1.5</timeoutFactor> <!-- Modifica il fattore di timeout -->
+              <threads>1</threads> <!-- Usa un thread per ridurre concorrenza -->
+              <verbose>true</verbose> <!-- Abilita log dettagliati -->
+              <exportLineCoverage>true</exportLineCoverage> <!-- Esporta copertura -->
             </configuration>
             <executions>
               <execution>

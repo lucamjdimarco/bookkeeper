@@ -82,7 +82,7 @@ public class BookieImplTests {
                     // Test Case 3: Directory non esistente, vecchio layout presente, mkdirs() ha successo, eccezione
                     {false, true, true, true, IOException.class},
                     // ###### AGGIUNTA questa casistica per aumentare la copertura di BADUA ######
-                    //{false, false, false, true, IOException.class}
+                    {false, false, false, true, IOException.class}
             });
         }
 
@@ -178,9 +178,8 @@ public class BookieImplTests {
                     // Invalid configurations
                     {"127.0.0.1:3181!", true, false},                   // Invalid customBookieId
                     {"", true, false},                                   // Empty customBookieId
-                    // ###### aggiunta per aumentare coverage per BADUA ######
-                    //{"readonly", true, true},
-                    //{null, false, false},                                 // Null customBookieId
+                    {"readonly", true, true},
+                    {null, false, false},                                 // Null customBookieId
             });
         }
 
@@ -256,8 +255,8 @@ public class BookieImplTests {
                     //Test modificati e aggiunti per aumentare la coverage di Badua
                     // ######################
 
-                    //{createConfigForShortName(null, null, 3181, true, true, true), false}, //AGGIUNTO per coprire getUseShortHostName gestito anche iface == null
-                    //{createConfigWithiface(null, "lo0", 3181, false), true},
+                    {createConfigForShortName(null, null, 3181, true, true, true), false}, //AGGIUNTO per coprire getUseShortHostName gestito anche iface == null
+                    {createConfigWithiface(null, "lo0", 3181, false), true},
 
 
 
@@ -759,16 +758,17 @@ public class BookieImplTests {
 
         @Before
         public void setup() throws Exception {
+            //pit
             this.dir = this.tmpDirs.createNew("bookieEntryTest", ".tmp");
 
             ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
 
+            //pit
             conf.setJournalDirName(this.dir.toString());
             conf.setLedgerDirNames(new String[]{this.dir.getAbsolutePath()});
 
             bookie = new TestBookieImpl(conf);
 
-            //this.bookie.statsLogger.getOpStatsLogger("").clear();
         }
 
         @Test
@@ -777,6 +777,7 @@ public class BookieImplTests {
                 // addEntry
                 bookie.addEntry(entry, ackBeforeSync, cb, ctx, masterKey);
 
+                //pit
                 assertEquals((EntryBuilder.createValidEntry().readableBytes()), ((TestStatsLogger.TestOpStatsLogger) this.bookie.statsLogger.getOpStatsLogger("")).getNumSuccessfulEvent());
 
                 if (expectException && exceptionClass == null) {
@@ -790,6 +791,7 @@ public class BookieImplTests {
                     ByteBuf result = bookie.readEntry(ledgerId, entryId);
                     assertNotNull("Resulting ByteBuf should not be null for valid inputs.", result);
 
+                    //pit
                     if(EntryBuilder.isValidEntry(entry)) {
                         assertEquals(2*(EntryBuilder.createValidEntry().readableBytes()), ((TestStatsLogger.TestOpStatsLogger) this.bookie.statsLogger.getOpStatsLogger("")).getNumSuccessfulEvent());
                     }
@@ -856,6 +858,7 @@ public class BookieImplTests {
                 }
 
             } catch (Exception e) {
+                //pit
                 if(entry!=null){
                     if(EntryBuilder.isInvalidEntry(entry)){
                         assertEquals(EntryBuilder.createInvalidEntry().readableBytes(), ((TestStatsLogger.TestOpStatsLogger) this.bookie.statsLogger.getOpStatsLogger("")).getNumFailedEvent());
@@ -875,6 +878,7 @@ public class BookieImplTests {
         public void recoveryAddEntryTest() {
             try {
 
+                //pit
                 if(exceptionClass != null && expectException) {
                     BookieImpl spyBookie = spy(bookie);
 
@@ -898,6 +902,7 @@ public class BookieImplTests {
                     assertNotNull("Recovered entry should be readable.", result);
                     assertEquals("Entry content should match.", entry, result);
 
+                    //pit
                     assertTrue(((TestStatsLogger.TestOpStatsLogger) this.bookie.statsLogger.getOpStatsLogger("")).getNumSuccessfulEvent() > 0);
 
                     if (expectException) {
@@ -938,51 +943,6 @@ public class BookieImplTests {
             };
         }
     }
-
-    /*public static class BookieImplReadEntryFailureTest {
-
-        private File dir;
-        private final TmpDirs tmpDirs = new TmpDirs();
-        private BookieImpl bookie;
-
-        @Before
-        public void setup() throws Exception {
-
-            this.dir = this.tmpDirs.createNew("bookieEntryTest", ".tmp");
-
-            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-            conf.setJournalDirName(this.dir.toString());
-            conf.setLedgerDirNames(new String[]{this.dir.getAbsolutePath()});
-
-            bookie = new TestBookieImpl(conf);
-        }
-
-        @Test
-        public void readEntryFailureTest() {
-            try {
-                long invalidLedgerId = -1L;
-                long invalidEntryId = -1L;
-
-                bookie.readEntry(invalidLedgerId, invalidEntryId);
-                fail("Expected an exception for invalid ledgerId and entryId, but none was thrown.");
-            } catch (IOException | BookieException e) {
-                assertTrue("Correct exception for invalid ledgerId and entryId.", true);
-                assertEquals(((TestStatsLogger.TestOpStatsLogger) this.bookie.statsLogger.getOpStatsLogger("")).getNumFailedEvent(), 0);
-            } catch (Exception e) {
-                fail("Unexpected exception thrown: " + e.getClass().getSimpleName());
-            }
-        }
-
-        @After
-        public void teardown() {
-            try {
-                tmpDirs.cleanup();
-                bookie.shutdown();
-            } catch (Exception e) {
-                fail("Unexpected exception thrown during teardown: " + e.getClass().getSimpleName());
-            }
-        }
-    }*/
 
     @RunWith(Parameterized.class)
     public static class OptimizedFormatTest {

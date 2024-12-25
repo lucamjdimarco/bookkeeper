@@ -305,6 +305,8 @@ public class LedgerHandleTests {
                 } else {
                     LedgerEntries entries = future.join();
                     assertNotNull("Entries should not be null for valid input", entries);
+                    //aggiunto per PIT (DA VERIFICARE)
+                    assertTrue("Last entry should be <= lastAddConfirmed", lastEntry <= ledgerHandle.getLastAddConfirmed());
                 }
             } catch (CompletionException e) {
                 if (!expectedException) {
@@ -359,13 +361,13 @@ public class LedgerHandleTests {
             super.setUp("/ledgers");
             ledgerHandle = bkc.createLedger(BookKeeper.DigestType.CRC32, "passwd".getBytes());
 
-            LoggerContext context = (LoggerContext) org.apache.logging.log4j.LogManager.getContext(false);
+            /*LoggerContext context = (LoggerContext) org.apache.logging.log4j.LogManager.getContext(false);
             Configuration config = context.getConfiguration();
 
             // Configura il logger di LedgerHandle a DEBUG
             LoggerConfig loggerConfig = config.getLoggerConfig(LedgerHandle.class.getName());
             loggerConfig.setLevel(Level.DEBUG);
-            context.updateLoggers();
+            context.updateLoggers();*/
 
 
             for (int i = 0; i < 20; i++) {
