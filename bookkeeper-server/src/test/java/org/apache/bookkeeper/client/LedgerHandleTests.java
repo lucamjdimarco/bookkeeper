@@ -8,6 +8,9 @@ import org.apache.bookkeeper.client.api.LedgerEntries;
 import org.apache.bookkeeper.conf.ClientConfiguration;
 import org.apache.bookkeeper.conf.TestBKConfiguration;
 import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.Assert;
@@ -356,7 +359,13 @@ public class LedgerHandleTests {
             super.setUp("/ledgers");
             ledgerHandle = bkc.createLedger(BookKeeper.DigestType.CRC32, "passwd".getBytes());
 
+            LoggerContext context = (LoggerContext) org.apache.logging.log4j.LogManager.getContext(false);
+            Configuration config = context.getConfiguration();
 
+            // Configura il logger di LedgerHandle a DEBUG
+            LoggerConfig loggerConfig = config.getLoggerConfig(LedgerHandle.class.getName());
+            loggerConfig.setLevel(Level.DEBUG);
+            context.updateLoggers();
 
 
             for (int i = 0; i < 20; i++) {

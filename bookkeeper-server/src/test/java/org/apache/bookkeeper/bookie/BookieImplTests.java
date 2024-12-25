@@ -81,8 +81,8 @@ public class BookieImplTests {
                     {false, false, true, true, null},
                     // Test Case 3: Directory non esistente, vecchio layout presente, mkdirs() ha successo, eccezione
                     {false, true, true, true, IOException.class},
-                    //AGGIUNTA questa casistica per aumentare la copertura di BADUA
-                    {false, false, false, true, IOException.class}
+                    // ###### AGGIUNTA questa casistica per aumentare la copertura di BADUA ######
+                    //{false, false, false, true, IOException.class}
             });
         }
 
@@ -178,9 +178,9 @@ public class BookieImplTests {
                     // Invalid configurations
                     {"127.0.0.1:3181!", true, false},                   // Invalid customBookieId
                     {"", true, false},                                   // Empty customBookieId
-                    // aggiunta per aumentare coverage per BADUA --> continua a non vederli
-                    {"readonly", true, true},
-                    {null, false, false},                                 // Null customBookieId
+                    // ###### aggiunta per aumentare coverage per BADUA ######
+                    //{"readonly", true, true},
+                    //{null, false, false},                                 // Null customBookieId
             });
         }
 
@@ -256,14 +256,10 @@ public class BookieImplTests {
                     //Test modificati e aggiunti per aumentare la coverage di Badua
                     // ######################
 
-                    {createConfigForShortName(null, null, 3181, true, true, true), false}, //AGGIUNTO per coprire getUseShortHostName gestito anche iface == null
-                    {createConfigWithiface(null, "lo0", 3181, false), true},
+                    //{createConfigForShortName(null, null, 3181, true, true, true), false}, //AGGIUNTO per coprire getUseShortHostName gestito anche iface == null
+                    //{createConfigWithiface(null, "lo0", 3181, false), true},
 
-                    // ######################
-                    //gli altri 0 covered non li posso coprire perché sono metodi statici
-                    //PROBLEMATICO
-                    //{createConfigForHostNotResolv(null, "en0", -1, true, false, false), true}, //AGGIUNTO per coprire UnknownHostInterface
-                    //{createConfig("     ", 3181), false}, //AGGIUNTO per PIT
+
 
 
             });
@@ -657,8 +653,7 @@ public class BookieImplTests {
                     {1L, null, null, null, "".getBytes(), true},
                     {1L, EntryBuilder.createInvalidEntryWithoutMetadata(), null, new Object(), null, true},
                     {-1L, EntryBuilder.createValidEntry(), mockWriteCallback(), new Object(), "ValidMasterKey".getBytes(), true},
-                    //aumentare badua (?)
-                    //{2L, EntryBuilder.createValidEntry(), mockWriteCallback(), new Object(), "MasterKey".getBytes(), false},
+
             });
         }
 

@@ -240,7 +240,7 @@
                 <artifactItem>
                   <groupId>br.usp.each.saeg</groupId>
                   <artifactId>ba-dua</artifactId>
-                  <version>0.4.0</version>
+                  <version>0.6.0</version>
                   <type>zip</type>
                   <outputDirectory>${project.build.directory}</outputDirectory>
                 </artifactItem>
@@ -262,7 +262,7 @@
           </execution>
         </executions>
       </plugin>
-      <plugin>
+      <!--<plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
         <version>2.10</version>
@@ -286,7 +286,7 @@
             </configuration>
           </execution>
         </executions>
-      </plugin>
+      </plugin>-->
       <plugin>
         <groupId>org.apache.rat</groupId>
         <artifactId>apache-rat-plugin</artifactId>
@@ -421,12 +421,12 @@
         <activeByDefault>false</activeByDefault>
       </activation>
       <properties>
-        <BADUACLI>./target/lib/ba-dua-cli-0.4.0-all.jar</BADUACLI>
+        <BADUACLI>./target/lib/ba-dua-cli-0.6.0-all.jar</BADUACLI>
         <BADUASER>./target/badua.ser</BADUASER>
         <CLASSES>./target/classes</CLASSES>
         <BADUAXML>./target/badua.xml</BADUAXML>
         <argLine>
-          -javaagent:${project.build.directory}/lib/ba-dua-agent-rt-0.4.0-all.jar
+          -javaagent:${project.build.directory}/lib/ba-dua-agent-rt-0.6.0-all.jar
           -Doutput.file=target/badua.ser
         </argLine>
       </properties>
@@ -485,11 +485,11 @@
             <configuration>
               <targetClasses>
                 <param>org.apache.bookkeeper.bookie.BookieImpl</param>
-                <!--<param>org.apache.bookkeeper.client.LedgerHandle</param>-->
+                <param>org.apache.bookkeeper.client.LedgerHandle</param>
               </targetClasses>
               <targetTests>
                 <param>org.apache.bookkeeper.bookie.BookieImplTests</param>
-                <!--<param>org.apache.bookkeeper.client.LedgerHandleTests</param>-->
+                <param>org.apache.bookkeeper.client.LedgerHandleTests</param>
               </targetTests>
               <avoidCallsTo>
                 <avoidCallsTo>org.slf4j</avoidCallsTo>
