@@ -10,12 +10,8 @@ import org.apache.bookkeeper.helper.EntryBuilder;
 import org.apache.bookkeeper.helper.EnumForDir;
 import org.apache.bookkeeper.net.BookieId;
 import org.apache.bookkeeper.net.BookieSocketAddress;
-import org.apache.bookkeeper.net.DNS;
 import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks;
-import org.apache.bookkeeper.stats.StatsLogger;
-import org.apache.bookkeeper.test.TestStatsProvider;
 import org.apache.bookkeeper.test.TmpDirs;
-import org.awaitility.Awaitility;
 import org.junit.*;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
@@ -34,7 +30,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
@@ -186,17 +181,6 @@ public class BookieImplTests {
         @Test
         public void testGetBookieId() {
             try {
-                /*ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-                if (customBookieId != null) conf.setBookieId(customBookieId);
-
-                BookieId bookieId = BookieImpl.getBookieId(conf);
-
-                if (expectException) {
-                    fail("Expected an exception, but none was thrown.");
-                }
-                assertNotNull("BookieId should not be null for valid configuration.", bookieId);*/
-
-                //uso del mock per conf invalida ma BADUA non lo vede
                 ServerConfiguration conf;
                 if (useMock) {
                     conf = mock(ServerConfiguration.class);
@@ -359,7 +343,6 @@ public class BookieImplTests {
         public static void setUpClass() throws Exception {
             tmpDirs = new TmpDirs();
 
-            // Create resources for testing using TmpDirs
             existingDir = tmpDirs.createNew("existingDir", null);
             anotherExistingDir = tmpDirs.createNew("anotherExistingDir", null);
         }
@@ -431,7 +414,6 @@ public class BookieImplTests {
                     {createInvalidConfig(), createMockLedgerStorage(false), true}, // conf invalida con ledgerStorage non inizializzato
                     {createValidConfig(), createMockLedgerStorage(true), true},    // conf valida con ledgerStorage già inizializzato
 
-                    // Da eliminare ??
                     {createValidConfig(), null, false},
             });
         }
@@ -1025,30 +1007,14 @@ public class BookieImplTests {
                     case "N":
                         System.setIn(new ByteArrayInputStream("N\n".getBytes()));
                         break;
-                    /*case "INVALID":
-                        InputStream failingStream = mock(InputStream.class);
-                        when(failingStream.read()).thenThrow(new IOException("Simulated IOException"));
-                        System.setIn(failingStream);
-                        break;*/
                     default:
                         throw new IllegalArgumentException("Invalid input case: " + this.input);
                 }
-
-                /*assertNotNull("Journal dirs should not be null", conf.getJournalDirs());
-                assertTrue("Journal dirs should not be empty", conf.getJournalDirs().length > 0);
-                for (File dir : conf.getJournalDirs()) {
-                    assertNotNull("Each journal dir should not be null", dir);
-                }*/
 
 
 
                 Assert.assertEquals(expectedResult, BookieImpl.format(conf, isInteractive, force));
 
-                //boolean result = BookieImpl.format(conf, isInteractive, force);
-
-                //assertEquals("Result mismatch", this.expectedResult, result);
-
-                // Controllo sulle directory dei journal
                 File[] journalDirs = conf.getJournalDirs();
                 if (journalDirs != null && expectedResult) {
                     for (File dir : journalDirs) {
@@ -1059,7 +1025,6 @@ public class BookieImplTests {
                     }
                 }
 
-                // Controllo sulle directory dei ledger
                 File[] ledgerDirs = conf.getLedgerDirs();
                 if (ledgerDirs != null && expectedResult) {
                     for (File dir : ledgerDirs) {
@@ -1070,7 +1035,6 @@ public class BookieImplTests {
                     }
                 }
 
-                // Controllo sulle directory degli index
                 File[] indexDirs = conf.getIndexDirs();
                 if (indexDirs != null && expectedResult) {
                     for (File dir : indexDirs) {
@@ -1081,23 +1045,8 @@ public class BookieImplTests {
                     }
                 }
 
-                // Controllo sulla directory di garbage collection
-                /*String gcPath = conf.getGcEntryLogMetadataCachePath();
-                if (gcPath != null && expectedResult) {
-                    File gcDir = new File(gcPath);
-                    assertTrue("GC directory should exist after formatting", gcDir.exists());
-                    //assertTrue("GC directory should be writable after formatting", gcDir.canWrite());
-                    //assertTrue("GC directory should be empty after formatting", gcDir.list().length == 0);
-                }*/
-
-
-
                 assertFalse("Exception was not expected", this.expException);
 
-                /*assertEquals("Result mismatch", this.expectedResult, result);
-                assertEquals(this.expectedResult, result);
-                assertFalse("Exception was not expected", this.expException);
-                System.out.println(result);*/
             } catch (NullPointerException e) {
                 if (!expException) {
                     fail("Unexpected exception thrown: " + e.getMessage());
