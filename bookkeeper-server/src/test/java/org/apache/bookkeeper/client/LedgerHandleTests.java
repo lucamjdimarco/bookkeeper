@@ -1,16 +1,12 @@
 package org.apache.bookkeeper.client;
 
-import com.sun.org.apache.xpath.internal.operations.Bool;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.bookkeeper.bookie.BookKeeperClusterTestCase;
 import org.apache.bookkeeper.client.api.LedgerEntries;
 import org.apache.bookkeeper.conf.ClientConfiguration;
 import org.apache.bookkeeper.conf.TestBKConfiguration;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.config.Configuration;
-import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.Assert;
@@ -19,16 +15,13 @@ import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.Mockito;
-import org.mockito.internal.matchers.Null;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Field;
+
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
-import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,7 +31,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.mock;
 
 @RunWith(value = Enclosed.class)
 public class LedgerHandleTests {
@@ -233,21 +225,7 @@ public class LedgerHandleTests {
             }
         }
 
-        private static AsyncCallback.ReadCallback mockReadCallback() {
-            return (rc, ledgerHandle, entries, ctx) -> {
-                if (rc == BKException.Code.OK) {
 
-                    assertNotNull("Entries should not be null on successful read", entries);
-                    assertTrue("Entries should contain at least one element", entries.hasMoreElements());
-                } else {
-                    System.out.println("ReadCallback failed with result code: " + rc);
-                    assertTrue("Failure expected due to invalid input",
-                            rc == BKException.Code.ReadException ||
-                                    rc == BKException.Code.IncorrectParameterException ||
-                                    rc == BKException.Code.BookieHandleNotAvailableException);
-                }
-            };
-        }
 
     }
 
@@ -360,14 +338,6 @@ public class LedgerHandleTests {
         public void setUp() throws Exception {
             super.setUp("/ledgers");
             ledgerHandle = bkc.createLedger(BookKeeper.DigestType.CRC32, "passwd".getBytes());
-
-            /*LoggerContext context = (LoggerContext) org.apache.logging.log4j.LogManager.getContext(false);
-            Configuration config = context.getConfiguration();
-
-            // Configura il logger di LedgerHandle a DEBUG
-            LoggerConfig loggerConfig = config.getLoggerConfig(LedgerHandle.class.getName());
-            loggerConfig.setLevel(Level.DEBUG);
-            context.updateLoggers();*/
 
 
             for (int i = 0; i < 20; i++) {
@@ -533,32 +503,6 @@ public class LedgerHandleTests {
 
         @Test
         public void testAsyncAddEntry() {
-            /*try {
-                ledgerHandle.asyncAddEntry(data, offset, length, callback, ctx);
-
-                if (offset < 0 || length < 0 || (offset + length) > (data != null ? data.length : 0)) {
-                    fail("Expected ArrayIndexOutOfBoundsException for invalid offset/length but did not throw.");
-                }
-
-                if (expectException) {
-                    fail("Expected exception, but method executed successfully.");
-                }
-            } catch (NullPointerException e) {
-                if (!expectException) {
-                    fail("Did not expect an exception, but got: " + e);
-                } else {
-                    assertTrue("Exception caught", expectException);
-                }
-            } catch (Exception e) {
-                if (!expectException) {
-                    fail("Did not expect an exception, but got: " + e);
-                } else {
-                    if (offset < 0 || length < 0 || (offset + length) > (data != null ? data.length : 0)) {
-                        assertTrue("Exception caught", expectException);
-                    }
-
-                }
-            }*/
             if (expectException) {
                 assertThrows(expectedExceptionType, () -> {
                     ledgerHandle.asyncAddEntry(data, offset, length, callback, ctx);
@@ -690,25 +634,6 @@ public class LedgerHandleTests {
                     ledgerHandle.asyncReadLastConfirmedAndEntry(entryId, timeOutInMillis, parallel, null, ctx);
                 }
 
-                /*if(hasMoreElement) {
-                    long lastEntryId2 = ledgerHandle.addEntry("entry".getBytes());
-                    long lastEntryId3 = ledgerHandle.addEntry("entry".getBytes());
-
-                    ledgerHandle.asyncReadLastConfirmedAndEntry(lastEntryId, timeOutInMillis, parallel,
-                            (rc, lastConfirmed, entry, ctx) -> {
-                                rcAtom.set(rc);
-                                entryAtom.set(entry);
-                                lac.set(lastConfirmed);
-                                complete.set(true);
-                            }, this.ctx);
-
-                    Awaitility.await().untilTrue(complete);
-
-                    if (rcAtom.get() == BKException.Code.OK) {
-                        assertNull(entryAtom.get());
-                    }
-                }*/
-
 
             } catch(NullPointerException e) {
                 if (!expectException) {
@@ -756,13 +681,11 @@ public class LedgerHandleTests {
             return Arrays.asList(new Object[][]{
                     {true, new Object(), false, true},
                     {false, null, false, false},
-                    //{false, null, false, true},
 
                     //aggiunto per Jacoco
                     {false, new Object(), true, true},
                     {false, null, true, true},
-                    //{true, new Object(), false, false},
-                    //{false, null, true, false},
+
             });
         }
 
