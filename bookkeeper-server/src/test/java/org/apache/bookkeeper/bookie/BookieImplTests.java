@@ -964,7 +964,6 @@ public class BookieImplTests {
             return Arrays.asList(new Object[][]{
 
                     {EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, true, false, "Y", true, false},
-                    //{EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, EXISTENT_WITH_FILE, true, false, "INVALID", false, true},
                     {EXISTENT_DIR_WITH_SUBDIR_AND_FILE, EXISTENT_WITH_FILE, EMPTY_ARRAY, NON_EXISTENT_DIRS, true, false, "N", false, false},
                     {EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, EXISTENT_DIR_WITH_NON_REMOVABLE_FILE, false, true, "Y", false, false},
                     {EXISTENT_DIR_WITH_NON_REMOVABLE_EMPTY_SUBDIR, NON_EXISTENT_DIRS, EXISTENT_WITH_FILE, EMPTY_ARRAY, false, true, "Y", false, false},
