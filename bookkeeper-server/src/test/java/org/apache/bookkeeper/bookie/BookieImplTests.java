@@ -337,7 +337,7 @@ public class BookieImplTests {
             return Arrays.asList(new Object[][]{
                     // valid: array di dirs
                     {new File[]{existingDir, anotherExistingDir}, false},
-                    // invalid: array vuoto
+                    // array vuoto
                     {new File[]{}, false},
                     // invalid: null
                     {null, true},
