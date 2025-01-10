@@ -285,21 +285,6 @@ public class BookieImplTests {
             return conf;
         }
 
-        private static ServerConfiguration createConfigForHostNotResolv(String advertisedAddress, String iface, int bookiePort, boolean allowLoopback, boolean useHostName, boolean useShortHostName) {
-            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();
-            conf.setAdvertisedAddress(advertisedAddress);
-            conf.setBookiePort(bookiePort);
-            conf.setAllowLoopback(allowLoopback);
-            conf.setUseHostNameAsBookieID(useHostName);
-            conf.setUseShortHostName(useShortHostName);
-            if (iface != null) {
-                conf.setListeningInterface(iface);
-            } else {
-                conf.setListeningInterface(null);
-            }
-            return conf;
-        }
-
         @Test
         public void testGetBookieAddress() {
             try {
